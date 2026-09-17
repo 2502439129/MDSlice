@@ -1,0 +1,90 @@
+/* home.css —— 首页与文件树（样式移植自 file-tree.html 参考实现）
+   拆分自原 index.css，按职责归入 css/ 目录。 */
+
+/* 空状态（没有打开任何文档）：目录栏与拖动条没有意义，索性收起，提示占满整宽 */
+body.is-empty .shell,body.is-home .shell{grid-template-columns:minmax(0,1fr)}
+body.is-empty .sidebar,body.is-empty .resizer,body.is-empty .menu-btn,
+body.is-home .sidebar,body.is-home .resizer,body.is-home .menu-btn{display:none}
+body.is-empty .brand{display:block}
+
+/* 首页（文件与目录管理）：无章节、无目录树，整块是一张列表 */
+.home{padding:26px 2px 80px;max-width:1000px;margin:0 auto}
+.home__head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 6px}
+.home__head h2{margin:0;font-size:20px;font-weight:650}
+.home h2::before,.home h3::before{content:none}   /* 首页是面板不是文档，不要 H2/H3 级别标记 */
+.home__hint{margin-left:auto;font-size:12.5px;color:var(--text-faint)}
+.home__sec{margin:26px 0 8px;font-size:13px;font-weight:650;color:var(--text-muted);
+  letter-spacing:.02em;text-transform:uppercase}
+.home__notice{margin:14px 0 0;padding:10px 12px;border:1px solid var(--c-warn);border-radius:var(--radius);
+  background:var(--c-warn-bg);color:var(--text);font-size:13px;line-height:1.7}
+.home__none{margin:6px 0;font-size:13.5px;color:var(--text-muted)}
+.home__err{margin:2px 0 4px 22px;font-size:12.5px;color:var(--text-faint)}
+
+.home__list{list-style:none;margin:0;padding:0}
+.home__row{display:flex;align-items:flex-start;gap:8px;padding:5px 8px;border-radius:6px;
+  font-size:13.5px;line-height:1.5}
+.home__row:hover{background:var(--bg-subtle)}
+.home__row.is-active{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent)}
+.home__name{font-weight:600}
+.home__path{font-family:var(--font-mono);font-size:12px;color:var(--text-faint);
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home__btn{padding:1px 8px;font-size:12px;flex:none}
+.home__row .home__btn{margin-left:auto}
+.home__dir{margin:10px 0 0;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg-subtle)}
+.home__dirhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.home__dirname{font-weight:650;font-size:13.5px}
+
+.home__bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+.search{position:relative;flex:1;min-width:180px;max-width:280px}
+.search input{width:100%;font:inherit;font-size:13px;padding:5px 26px 5px 27px;color:var(--text);
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;outline:none}
+.search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search input::placeholder{color:var(--text-faint)}
+/* type="search" 在 Chromium/Safari 自带一个清除按钮，会和自绘的 .search__clear 变成两个 ✕ */
+.search input::-webkit-search-cancel-button,
+.search input::-webkit-search-decoration{-webkit-appearance:none;appearance:none;display:none}
+.search__icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:12px;
+  color:var(--text-faint);pointer-events:none}
+.search__clear{position:absolute;right:5px;top:50%;transform:translateY(-50%);appearance:none;border:0;
+  background:none;color:var(--text-faint);cursor:pointer;font-size:12px;line-height:1;padding:3px 5px;border-radius:4px}
+.search__clear:hover{color:var(--text);background:var(--bg-inset)}
+
+.ftree{padding:6px 4px;max-height:560px;overflow:auto;outline:none}
+.ftree:focus-visible{box-shadow:inset 0 0 0 2px var(--accent-soft)}
+.ftree__node{position:relative}
+.ftree__row{display:flex;align-items:center;gap:6px;padding:4px 12px 4px 8px;border-radius:6px;cursor:pointer;
+  user-select:none;color:var(--text-muted);white-space:nowrap;min-width:max-content}
+.ftree__row:hover{background:var(--bg-subtle);color:var(--text)}
+.ftree__row.is-selected{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.ftree__row mark{background:var(--c-warn-bg);color:inherit;border-radius:3px;padding:0 1px}
+
+/* 缩进 + 层级引导线 */
+.ftree__children{position:relative;padding-left:16px}
+.ftree__children::before{content:'';position:absolute;left:17px;top:0;bottom:7px;width:1px;background:var(--border)}
+.ftree__children[hidden]{display:none}
+
+/* 折叠按钮（箭头旋转 + 加载转圈）
+   注意：.tree-toggle / .tree-count 在 markdown 可折叠表格里已有同名样式，
+   这里一律限定在 .ftree 作用域内，避免互相覆盖。 */
+.ftree .tree-toggle{appearance:none;border:0;background:none;padding:0;margin:0;flex:none;
+  width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text-muted);border-radius:4px}
+.ftree .tree-toggle:hover{background:var(--bg-inset);color:var(--accent)}
+.ftree .tree-toggle .chev{display:block;width:10px;height:10px;transition:transform .15s}
+.ftree .tree-toggle[aria-expanded="false"] .chev{transform:rotate(-90deg)}
+.ftree .tree-toggle--leaf{width:17px;flex:none;display:inline-block;cursor:default}
+.ftree .tree-toggle.is-loading{color:var(--accent)}
+.ftree .tree-toggle.is-loading .chev{animation:ft-spin .8s linear infinite}
+@keyframes ft-spin{to{transform:rotate(360deg)}}
+
+.ftree__icon{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;
+  color:var(--ft-file)}
+.ftree__icon.is-dir{color:var(--ft-dir)}
+.ftree__icon svg{width:16px;height:16px;display:block}
+.ftree__name{font-size:13.5px}
+.ftree__meta{margin-left:10px;font-family:var(--font-mono);font-size:11.5px;color:var(--text-faint)}
+.ftree .tree-count{margin-left:7px;font-size:11px;font-weight:600;font-family:var(--font-mono);
+  color:var(--text-faint);background:var(--bg-inset);border-radius:10px;padding:0 6px}
+.ftree__row.is-selected .tree-count{background:var(--bg);color:var(--accent)}
+.ftree__empty{padding:2px 0 4px 42px;font-size:12.5px;color:var(--text-faint)}

@@ -1,0 +1,54 @@
+/* tokens.css —— 设计令牌（深浅色）与基础排版重置
+   拆分自原 index.css，按职责归入 css/ 目录。 */
+
+/* Markdown SPA Reader —— 样式移植自模板 index (2).html
+   1) 设计令牌、组件样式（badge / callout / meta-card / tabs / duo / table / codeblock）
+      与模板保持一致；
+   2) 侧栏项由模板的 `.sidebar a` 改为 `.sidebar .toc-row`（需要容纳折叠箭头）；
+   3) 新增处均以「增量」标注：右栏可隐藏的 grid、.callout__title、任务列表、
+      章节页首个标题去上边距、章节切换淡入。 */
+
+/* ============ 设计令牌 ============ */
+:root{
+  --font-sans: system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --font-mono: "JetBrains Mono","Fira Code","SFMono-Regular",Consolas,monospace;
+
+  --bg:#fff; --bg-subtle:#f6f8fa; --bg-inset:#f0f3f6;
+  --bg-header:rgba(255,255,255,.85);
+  --text:#1f2328; --text-muted:#636c76; --text-faint:#8c959f;
+  --border:#d1d9e0; --border-strong:#b7c0c9;
+  --accent:#0969da; --accent-soft:#ddf4ff;
+
+  --c-info:#0969da; --c-info-bg:#ddf4ff;
+  --c-warn:#9a6700; --c-warn-bg:#fff8c5;
+  --c-danger:#cf222e; --c-danger-bg:#ffebe9;
+  --c-note:#636c76; --c-note-bg:#f0f3f6;
+  --c-success:#1a7f37; --c-success-bg:#dafbe1;
+
+  --code-bg:#f6f8fa;
+  --code-k:#cf222e; --code-s:#0a3069; --code-c:#6e7781; --code-n:#0550ae; --code-f:#8250df;
+
+  --radius:8px; --maxw:920px;
+}
+[data-theme="dark"]{
+  --bg:#0d1117; --bg-subtle:#161b22; --bg-inset:#1c2128;
+  --bg-header:rgba(13,17,23,.85);
+  --text:#e6edf3; --text-muted:#9198a1; --text-faint:#6e7681;
+  --border:#30363d; --border-strong:#444c56;
+  --accent:#4493f8; --accent-soft:#121d2f;
+  --c-info:#4493f8; --c-info-bg:#0c2d6b33;
+  --c-warn:#d29922; --c-warn-bg:#272115;
+  --c-danger:#f85149; --c-danger-bg:#25171c;
+  --c-note:#9198a1; --c-note-bg:#1c2128;
+  --c-success:#3fb950; --c-success-bg:#0f2a17;
+  --code-bg:#161b22;
+  --code-k:#ff7b72; --code-s:#a5d6ff; --code-c:#8b949e; --code-n:#79c0ff; --code-f:#d2a8ff;
+}
+html{scroll-behavior:smooth;scroll-padding-top:100px}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:16px;line-height:1.75;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ============ 文件树（样式移植自 file-tree.html 参考实现） ============ */
+:root{--ft-dir:#54aeff;--ft-file:#8c959f}
+[data-theme="dark"]{--ft-dir:#4493f8;--ft-file:#6e7681}
