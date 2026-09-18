@@ -15,12 +15,16 @@
 | 内容增强 | 标题级元数据卡、`[[xx]]` 徽章、`~~删除线~~`、`==强调==`、`└` 可折叠表格、`:::tabs` 标签页、`:::cols` 多列、`:::details` 折叠块、四种 Callout 提示框、块级与行内数学公式 `$$…$$` / `$…$` |
 | 零构建零后端 | 一个入口 `MDSlice.html` + `css/`、`js/` 下的模块文件，除代码高亮(highlight.js)与公式排版(MathJax)外无外部依赖 |
 
+![首页](img/MDSlice-index.png)
+
+![页面](img/MDSlice-page.png)
+
 
 ## 一、快速开始
 
 | 方式 | 操作 | 说明 |
 |---|---|---|
-|本地打开|双击`MDSlice.html`||
+|本地打开|双击`MDSlice.html`| 必要文件：`MDSlice.html`、`css/`、`js/` |
 |静态服务|在`MDSlice.html`所在目录下启动静态服务器|打开时会自动读取同目录下的所有文档并列出|
 
 **静态服务命令参考**
@@ -29,6 +33,7 @@ python3 -m http.server 8080     # 浏览器访问 http://localhost:8080/MDSlice.
 npx serve -p 8080 -o
 npx http-server -p 8080 -o
 ```
+
 
 ## 二、功能简介
 
@@ -137,3 +142,35 @@ MDSlice/
 | 标签页不持久化 | 刷新后标签页清空，需重新打开文件 |
 
 浏览器要求：Chrome / Edge / Safari / Firefox 近几版均可（用到 `fetch`、`IntersectionObserver`、CSS Grid、`position: sticky`、`backdrop-filter`）。
+
+
+## 六、替换 CDN 为纯本地
+
+整页对外的请求只有 4 个：CDN 取 4 个文件，把它们换成本地文件，就得到一个完全不依赖网络的阅读器。
+
+| `MDSlice.html` 里的位置 | 现在（CDN 路径） | 改成本地路径 |
+|---|---|---|
+| `<head>` 的 `<link id="hljs-theme-light">` | `.../cdn-release@11.9.0/build/styles/github.min.css` | `lib/hljs/github.min.css` |
+| `<head>` 的 `<link id="hljs-theme-dark">` | `.../cdn-release@11.9.0/build/styles/github-dark.min.css` | `lib/hljs/github-dark.min.css` |
+| 页尾第一个 `<script>` | `.../cdn-release@11.9.0/build/highlight.min.js` | `lib/hljs/highlight.min.js` |
+| 页尾 MathJax 的 `<script>` | `.../mathjax@3.2.2/es5/tex-chtml.js` | `lib/mathjax/tex-chtml.js` |
+
+**MathJax 的字体目录必须按原结构一起拷贝**：它按自己所在路径去找 `output/chtml/fonts/woff-v2/`，只放一个 `tex-chtml.js` 的话公式会没有字形（看着是空的）。
+
+```text
+MDSlice.html
+lib/
+├── hljs/
+│   ├── highlight.min.js        代码高亮本体（单文件）
+│   ├── github.min.css          浅色代码主题
+│   └── github-dark.min.css     深色代码主题
+└── mathjax/
+    ├── tex-chtml.js            公式排版入口（单文件）
+    └── output/chtml/fonts/woff-v2/*.woff    数学字体（整目录）
+```
+
+下载地址就是上面那 4 个 CDN 链接（前缀 `https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/`、`https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/`），按上表另存即可；MathJax 也可以 `npm i mathjax@3.2.2` 后把 `node_modules/mathjax/es5/` 整个拷成 `lib/mathjax/`。
+
+两个容易漏的点：
+- 两个 `<link>` 的 **id 别改**（`hljs-theme-light` / `hljs-theme-dark`）：手动切主题是靠改写它们的 `media` 实现的（见 `js/05-shell.js`），换了 id 深浅色代码主题就不会跟着切。
+- 换代码配色只需替换那两个 css 文件；js 本体与版本建议保持与原 CDN 一致（highlight.js 11.9.0、MathJax 3.2.2）。
