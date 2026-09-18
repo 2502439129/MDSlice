@@ -131,12 +131,20 @@ main{padding:26px 40px 140px;min-width:0}
   .table-wrap{border:0;overflow:visible}
   table,thead,tbody,tr,td{display:block;width:100%}
   thead{display:none}
-  tbody tr{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;padding:6px 0;background:var(--bg)}
-  tbody td{border:0;padding:6px 14px 6px 45%;position:relative}
-  tbody td::before{content:attr(data-label);position:absolute;left:14px;top:6px;font-size:12px;
-    font-weight:650;color:var(--text-faint);text-transform:uppercase}
-  td.tree[data-level]{padding-left:45%}
-  tbody tr:nth-child(even){background:var(--bg)}
+  /* 卡片式：一行一张卡片，每个单元格变成「列名 / 内容」两行。列名走常规流（不再绝对定位），
+     所以任意长度的列名都不会压到内容上。.table-wrap 前缀用于压过 03-markdown.css 里同名的
+     tbody td / tbody tr / td.tree 规则 —— 该文件在本文件之后加载，同权重时它赢。 */
+  .table-wrap tbody tr{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;padding:5px 0;background:var(--bg)}
+  .table-wrap tbody tr:nth-child(even){background:var(--bg)}
+  .table-wrap tbody td{border:0;padding:4px 14px}
+  tbody td::before{content:attr(data-label);display:block;font-size:11.5px;font-weight:650;
+    letter-spacing:.03em;color:var(--text-faint);text-transform:uppercase;margin-bottom:2px}
+  /* 树形首列：窄屏收窄层级缩进并允许折行，给内容留出宽度 */
+  .table-wrap td.tree{white-space:normal}
+  .table-wrap td.tree[data-level="1"]{padding-left:26px}
+  .table-wrap td.tree[data-level="2"]{padding-left:42px}
+  .table-wrap td.tree[data-level="3"]{padding-left:58px}
+  .table-wrap td.tree[data-level="4"]{padding-left:74px}
   /* 窄屏收窄层级缩进，给表格卡片留出宽度 */
   #content .h-body{padding-left:calc(.65rem - 2px)}
 }
