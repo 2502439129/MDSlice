@@ -475,7 +475,7 @@
   var CALLOUT = { info: 'info', note: 'note', tip: 'tip', warning: 'warning', danger: 'danger', caution: 'danger' };
 
   /** 组装一个 Callout：type 决定配色与图标，bodyHtml 为已渲染的 HTML。
-      图标取自 MDSlice.html 的精灵（四种同为 24×24 填充风格，尺寸统一）。
+      图标取自 MDSlice.html 的精灵（四种同为 24×24 描边风格，显示尺寸统一 18px）。
       普通引用（note）不带图标，以便和带图标的四种 Alert 区分。 */
   function calloutHtml(type, title, bodyHtml) {
     var icon = type === 'note' ? '' :
