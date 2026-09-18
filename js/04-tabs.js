@@ -2,18 +2,16 @@
    本文件属于 MDSlice 的拆分模块，加载顺序见 MDSlice.html（共享全局作用域，无需打包）。 */
 'use strict';
 
-  /* =========================================================
-     9. 标签页：装载 / 切换 / 关闭 / 拖拽排序
-     ========================================================= */
+  /* ---- 标签页模型 ---- */
   var DOC_EXT = /\.(md|markdown|txt)$/i;
 
+  /** 标签上显示的名字：去掉文档后缀，空名兜底为「未命名」。 */
   function tabLabel(name) {
     return String(name || '').replace(DOC_EXT, '') || '未命名';
   }
 
-  /** 标签条上的显示名：只显示文件名（重名也不加路径前缀，避免标签被拉长）。
-      区分同名文件靠悬停提示（完整路径，见 renderTabBar 里的 el.title）与首页「已打开的文件」列表；
-      文件身份（去重、已打开判断）见 keyOfNode()，与显示名无关。 */
+  /** 刷新各标签页的显示名（只显示文件名，重名不加路径前缀）。
+      区分同名文件靠标签悬停提示与首页「已打开的文件」列表；身份判定见 openTabByKey()。 */
   function refreshTabLabels() {
     tabs.forEach(function (t) {
       if (t.kind === 'home') return;
@@ -21,13 +19,28 @@
     });
   }
 
+  /** 按 id 取标签页，找不到返回 null。 */
   function findTab(id) {
     for (var i = 0; i < tabs.length; i++) { if (tabs[i].id === id) return tabs[i]; }
     return null;
   }
 
-  /** 新建标签页（连带它自己的三个容器），并加入标签条。kind='home' 是首页（非文档） */
-  function createTab(name, src, kind) {
+  /** 取常驻首页标签（按 kind 判断，不能用名字）。 */
+  function homeTab() {
+    for (var i = 0; i < tabs.length; i++) { if (tabs[i].kind === 'home') return tabs[i]; }
+    return null;
+  }
+
+  /** 按身份键找文档标签页；首页不参与。 */
+  function openTabByKey(key) {
+    var hit = null;
+    tabs.forEach(function (t) { if (!hit && t.kind !== 'home' && t.key === key) hit = t; });
+    return hit;
+  }
+
+  /** 新建标签页（连带它自己的三个容器），并加入标签条；kind='home' 表示首页；
+      sourceUrl 是该文档自己的地址，用于把正文里的相对链接解析成绝对地址。 */
+  function createTab(name, src, kind, sourceUrl) {
     var id = 'tab' + (++tabSeq);
 
     var pane = document.createElement('div');
@@ -48,6 +61,7 @@
     var tab = {
       id: id, name: name, label: tabLabel(name), src: src, kind: kind || 'doc',
       key: 'file:' + name, dir: '',                      // 身份键与所在目录，见 openTab()
+      sourceUrl: sourceUrl || '',                        // 文档自身的地址（本地打开或直接上传的为空）
       sections: [], sectionById: Object.create(null), childrenById: Object.create(null),
       activeId: null, firstId: null, scrollY: 0,
       rendered: false, empty: false,
@@ -58,26 +72,15 @@
     return tab;
   }
 
-  /** 首页标签：固定第一个位置，不可关闭（kind='home'，内容由 renderHome 自建） */
-  function createHomeTab() {
-    var tab = createTab(HOME_NAME, '', 'home');
-    tab.label = '首页';
-    var at = tabs.indexOf(tab);
-    if (at > 0) { tabs.splice(at, 1); tabs.unshift(tab); }
-    return tab;
-  }
-
-  /** 把全局快捷引用指向某个标签页（渲染与交互都基于它） */
-  function useTab(tab) {
+  /** 把全局快捷引用（sections / sectionById / childrenById）指向某个标签页。 */
+  function setActiveTabRefs(tab) {
     activeTab = tab;
     sections = tab ? tab.sections : [];
     sectionById = tab ? tab.sectionById : Object.create(null);
     childrenById = tab ? tab.childrenById : Object.create(null);
   }
 
-  /** 渲染标签页内容（首次激活时调用；重复打开同名文件时会重新渲染）
-      注意：这里刻意不改 activeTab —— 滚动位置等视图状态依赖「谁在激活状态」来判断，
-      由 activateTab() 统一负责切换快捷引用。 */
+  /** 渲染标签页内容：章节切分、左栏目录、右栏小节与正文容器（不切换激活状态）。 */
   function renderTab(tab) {
     usedIds = Object.create(null);
 
@@ -103,7 +106,7 @@
     }).join('');
 
     var tree = buildTree(list);
-    tab.childrenById = collectChildren(tree);
+    tab.childrenById = collectChildIds(tree);
 
     tab.dom.nav.innerHTML = '';
     renderNavNodes(tree, tab.dom.nav);
@@ -111,19 +114,20 @@
     bindTabs(tab.dom.pane);
     bindTree(tab.dom.pane);
     highlightCode(tab.dom.pane);
+    renderMath(tab.dom.pane);
 
     tab.rendered = true;
     tab.firstId = list[0].id;
     tab.activeId = null;
   }
 
-  /** 切换标签页：换显隐 → 恢复视图状态 → 同步标题与右栏 */
+  /** 切换标签页：换容器显隐 → 恢复视图状态 → 同步页面标题、右栏与标签条。 */
   function activateTab(id) {
     var tab = findTab(id);
     if (!tab) return;
 
     if (activeTab && activeTab !== tab) {
-      activeTab.scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+      activeTab.scrollY = scrollY();                       // 离开前记下当前滚动位置
     }
 
     tabs.forEach(function (t) {
@@ -132,13 +136,11 @@
       t.dom.nav.classList.toggle('is-active', on);
       t.dom.toc.classList.toggle('is-active', on);
     });
-    emptyState.hidden = true;
 
-    useTab(tab);
+    setActiveTabRefs(tab);
     if (!tab.rendered) renderTab(tab);
 
-    // 首页没有目录树，收起左侧栏与 ☰（与空状态同一套样式）
-    document.body.classList.toggle('is-home', tab.kind === 'home');
+    document.body.classList.toggle('is-home', tab.kind === 'home');    // 首页无目录树，收起侧栏与 ☰
 
     document.title = tab.kind === 'home'
       ? 'MDSlice'
@@ -150,8 +152,7 @@
     } else {
       showSection(tab.activeId || tab.firstId);
       scrollToY(tab.scrollY);
-      // 布局刚切换完，下一帧再校一次，避免被"章节显隐导致的高度变化"截断；
-      // 重新激活时先取消上一次的补偿，避免过期回调把位置改回去
+      // 章节显隐会改变页面高度，下一帧再校一次滚动位置；重新激活时先取消上一次的补偿
       if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = 0; }
       if (tab.scrollY) {
         scrollRaf = requestAnimationFrame(function () {
@@ -162,29 +163,28 @@
     }
 
     renderTabBar();
-    document.getElementById('sidebar').classList.remove('open');
+    sidebar.classList.remove('open');
   }
 
-  /** 打开文件：同一「身份键」的标签页会被关闭后重新打开（占原位置）。
-      key 省略时用文件名（直接上传的文件：文件名即身份）；
-      从目录打开的文件传「目录名/相对路径」，于是 B1/index.md 与 B2/index.md 互不冲突。 */
-  function openTab(name, src, key, dir) {
+  /** 打开文件：同一「身份键」的标签页先关闭，再在原位置重开。
+      key 省略时用文件名（直接上传的文件以文件名作身份）；从目录打开的文件传
+      「顶层目录名/相对路径」，所以 B1/index.md 与 B2/index.md 是两份文件。 */
+  function openTab(name, src, key, dir, sourceUrl) {
     key = key || ('file:' + name);
-    var dup = null;
-    tabs.forEach(function (t) { if (!dup && t.kind !== 'home' && t.key === key) dup = t; });
+    var dup = openTabByKey(key);
     var at = dup ? tabs.indexOf(dup) : -1;
 
     if (dup) {
-      if (dup === activeTab) { activeTab = null; useTab(null); }   // 原标签正被替换：无需保存它的状态
-      detachTab(dup);                                              // 注意：必须从 tabs 数组里一并摘除，否则会留下点不开的幽灵标签
+      if (dup === activeTab) { activeTab = null; setActiveTabRefs(null); }   // 被替换的标签无需保存状态
+      detachTab(dup);
     }
 
-    var tab = createTab(name, src);
+    var tab = createTab(name, src, 'doc', sourceUrl);
     tab.key = key;
     tab.dir = dir || '';
     if (at >= 0) {
       tabs.splice(tabs.indexOf(tab), 1);
-      tabs.splice(at, 0, tab);                                     // 占回原位置，避免标签条跳动
+      tabs.splice(at, 0, tab);                             // 占回原位置
     }
 
     renderTab(tab);
@@ -192,7 +192,39 @@
     return tab;
   }
 
-  /** 从集合与 DOM 中摘除标签页（不处理激活切换） */
+  /** 打开一份文档：本地用 File 引用、服务器用 fetch，读完按 openTab 的流程开标签
+      （同一身份会原地重开）；fragment 非空时打开后定位到该小节。
+      读取失败时返回被拒的 Promise，由调用方决定提示什么。 */
+  function openDocNode(doc, fragment) {
+    var read = doc.file
+      ? doc.file.text()
+      : fetch(doc.url).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        });
+    return read.then(function (text) {
+      openTab(doc.name, text, doc.key, doc.dir, doc.url || '');
+      jumpToFragment(fragment);
+      return true;
+    });
+  }
+
+  /** 在当前标签页顶部显示一条提示：只保留最新一条，点击可关，数秒后自动消失。 */
+  function showPaneNotice(html) {
+    var tab = activeTab;
+    if (!tab) return;
+    var old = tab.dom.pane.querySelector('.pane-notice');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'pane-notice';
+    el.setAttribute('role', 'status');
+    el.innerHTML = html;
+    el.addEventListener('click', function () { el.remove(); });
+    tab.dom.pane.insertBefore(el, tab.dom.pane.firstChild);
+    setTimeout(function () { if (el.parentNode) el.remove(); }, 9000);
+  }
+
+  /** 从集合与 DOM 中摘除标签页（不处理激活切换）。 */
   function detachTab(tab) {
     var at = tabs.indexOf(tab);
     if (at >= 0) tabs.splice(at, 1);
@@ -201,7 +233,7 @@
     tab.dom.toc.remove();
   }
 
-  /** 关闭标签页：激活邻居（右优先，否则左）。首页不可关闭 */
+  /** 关闭标签页：激活邻居（右优先，否则左）；首页不可关闭。 */
   function closeTab(id) {
     var tab = findTab(id);
     if (!tab || tab.kind === 'home') return;
@@ -213,34 +245,20 @@
     detachTab(tab);
     if (wasActive) {
       activeTab = null;
-      useTab(null);
-      if (next) activateTab(next.id);
-      else showEmpty();
+      setActiveTabRefs(null);
+      var fallback = next || homeTab();                    // 首页常驻，没有邻居时落在首页
+      if (fallback) activateTab(fallback.id);
+      else renderTabBar();
     } else {
       renderTabBar();
     }
   }
 
-  /** 没有标签页时的空状态（tip 省略时用默认提示）。所有进入空状态的路径都必须走这里，
-      否则 body.is-empty / no-toc 不会被设置，窄屏会露出无意义的 ☰ 与侧栏。 */
-  function showEmpty(tip) {
-    emptyState.innerHTML = tip || EMPTY_TIP;
-    emptyState.hidden = false;
-    tocAside.hidden = true;
-    shell.classList.add('no-toc');
-    document.title = 'MDSlice';
-    renderTabBar();
-  }
-
-  /** 标签条：按 tabs 顺序重建（数量少，直接重建比增量维护更简单） */
+  /** 重建标签条（按 tabs 顺序）。 */
   function renderTabBar() {
-    refreshTabLabels();   // 标签文字只显示文件名（同名文件靠 el.title 的完整路径区分）
+    refreshTabLabels();
     tabbar.innerHTML = '';
-
-    // 没有任何标签页时进入「空状态」：收起目录栏与 ☰ 按钮（相关样式见 index.css）
-    document.body.classList.toggle('is-empty', !tabs.length);
-
-    markHomeDirty();   // 标签增删后，首页的「已打开的文件」需要重建（下次切回时）
+    markHomeDirty();                                       // 标签增删后首页的「已打开的文件」需重建
 
     tabs.forEach(function (tab) {
       var isHome = tab.kind === 'home';
@@ -248,16 +266,26 @@
       el.className = 'tab' + (isHome ? ' tab--home' : '') + (tab === activeTab ? ' is-active' : '');
       el.dataset.id = tab.id;
       el.title = isHome ? '首页（不可关闭）' : (tab.dir ? tab.dir + '/' + tab.name : tab.name);
-      el.draggable = !isHome;                    // 首页固定在第一位，不参与拖拽排序
+      el.draggable = !isHome;                              // 首页固定在第一位，不参与拖拽排序
 
-      if (isHome) el.appendChild(homeIcon());     // 首页用 SVG 图标（定义见 MDSlice.html 的 #i-home）
+      if (isHome) {                                        // 首页图标取自 MDSlice.html 的 #i-home 精灵
+        var NS = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('class', 'tab__icon');
+        svg.setAttribute('aria-hidden', 'true');
+        var use = document.createElementNS(NS, 'use');
+        use.setAttribute('href', '#i-home');
+        svg.appendChild(use);
+        el.appendChild(svg);
+      }
+
       var label = document.createElement('span');
       label.className = 'tab__name';
       label.textContent = isHome ? '首页' : tab.label;
       el.appendChild(label);
 
       var closeEl = null;
-      if (!isHome) {                             // 首页不可关闭，不渲染 ×
+      if (!isHome) {                                       // 首页不可关闭，不渲染 ×
         closeEl = document.createElement('button');
         closeEl.type = 'button';
         closeEl.className = 'tab__close';
@@ -288,37 +316,25 @@
     });
   }
 
-  /** 首页标签的图标：引用 MDSlice.html 里定义的 SVG 精灵（fill=currentColor，跟随标签颜色） */
-  function homeIcon() {
-    var NS = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('class', 'tab__icon');
-    svg.setAttribute('aria-hidden', 'true');
-    var use = document.createElementNS(NS, 'use');
-    use.setAttribute('href', '#i-home');
-    svg.appendChild(use);
-    return svg;
-  }
-
+  /** 清掉标签条上的拖拽落点标记。 */
   function clearDragMarks() {
     Array.prototype.forEach.call(tabbar.children, function (el) {
       el.classList.remove('is-over', 'is-over-end');
     });
   }
 
-  /** 拖拽排序：按被拖标签的落点重排 tabs，再重建标签条 */
+  /** 拖拽排序：把被拖标签插到落点标签的前/后，再重建标签条；首页不可被拖动。 */
   function moveTab(fromId, overId, after) {
     var from = findTab(fromId), over = findTab(overId);
-    if (!from || !over || from === over || from.kind === 'home') return;   // 首页不可被拖动
+    if (!from || !over || from === over || from.kind === 'home') return;
 
     tabs.splice(tabs.indexOf(from), 1);
-    // 落在首页上 → 排到首页右边（第一个文档标签的位置）
-    var at = over.kind === 'home' ? 1 : tabs.indexOf(over) + (after ? 1 : 0);
+    var at = over.kind === 'home' ? 1 : tabs.indexOf(over) + (after ? 1 : 0);   // 落在首页上 → 排首页之后
     tabs.splice(at, 0, from);
     renderTabBar();
   }
 
-  /** 在当前标签页的容器内按 id 精确查找（避免多标签页之间的 id 干扰） */
+  /** 在当前标签页的容器内按 id 查找元素（避免多标签页之间的 id 干扰）。 */
   function findInActivePane(id) {
     if (!activeTab) return null;
     var list = activeTab.dom.pane.querySelectorAll('[id]');

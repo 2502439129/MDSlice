@@ -1,11 +1,11 @@
-/* markdown.css —— 文档内容样式：标题、元数据卡、Callout、徽章、表格（含折叠树首列）、代码块、tabs、duo
-   拆分自原 index.css，按职责归入 css/ 目录。 */
+/* markdown.css —— 文档内容样式：标题、元数据卡、Callout、徽章、表格（含折叠树首列）、
+   代码块、tabs 面板与 duo 双栏。 */
 
 *,*::before,*::after{box-sizing:border-box}
-/* 折叠按钮：放大到 2 倍（transform 不改变占位，所以盒子仍是 15px，标签不会移位） */
+/* 折叠箭头：视觉放大 2 倍（transform 不改变占位，盒子仍是 15px，标签不会移位） */
 .caret{flex:none;width:15px;text-align:center;font-size:10px;color:var(--text-faint);
   line-height:2.1;transform:scale(2);transition:transform .15s}
-/* 叶子项：保留占位以对齐同层标签，但不显示箭头、不可点击 */
+/* 叶子项：保留占位以对齐同层标签，不显示箭头、不可点击 */
 .caret--empty{cursor:default}
 .caret.collapsed{transform:scale(2) rotate(-90deg)}
 
@@ -13,8 +13,7 @@
 main h1{font-size:29px;line-height:1.3;margin:0 0 6px;letter-spacing:-.01em;scroll-margin-top:90px}
 main h2{font-size:22px;margin:42px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border);scroll-margin-top:90px}
 main h3{font-size:17px;margin:26px 0 10px;scroll-margin-top:90px}
-/* 增量：标题前加级别小标记（H1…H6）；只作用于正文，侧栏/右栏目录不受影响
-   （伪元素不进 textContent，右栏取标题文本时也不会带上它） */
+/* 标题前的级别标记（H1…H6）：只作用于正文，且用伪元素生成，不进 textContent */
 main h1::before,main h2::before,main h3::before,
 main h4::before,main h5::before,main h6::before{
   font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.02em;
@@ -31,22 +30,25 @@ main li{margin-bottom:6px}
 .anchor{margin-left:8px;color:var(--text-faint);font-weight:400;opacity:0;transition:opacity .15s}
 h1:hover .anchor,h2:hover .anchor,h3:hover .anchor{opacity:1;text-decoration:none}
 code{font-family:var(--font-mono);font-size:.875em;background:var(--bg-inset);padding:.15em .4em;border-radius:4px}
+/* 删除线 ~~x~~ 与强调 ==x== */
+main del{color:var(--text-muted)}
+main mark{background:var(--c-warn-bg);color:inherit;padding:0 2px;border-radius:3px}
+/* 图片：不超出正文宽度（超高时等比缩放） */
+main img{max-width:100%;height:auto;border-radius:6px;vertical-align:middle}
 hr{border:0;border-top:1px solid var(--border);margin:28px 0}
 
-/* 章节（增量：模板是整篇渲染，这里改成章节块显隐） */
+/* 章节块：同一时刻只显示一个 */
 #content .section{display:none}
 #content .section.active{display:block;animation:fade .18s ease}
-/* 增量：章节页的首个标题不需要模板给的上边距 */
+/* 章节页的首个标题不留上边距 */
 #content .section > h1:first-child,
 #content .section > h2:first-child,
 #content .section > h3:first-child{margin-top:0}
-/* 增量：H1/H2 页会展开整章，内联在后面的子章节标题要恢复模板的上边距 */
+/* H1/H2 页会展开整章，紧随其后的内联子标题恢复上边距 */
 #content .section.active + .section.active > h2:first-child{margin-top:42px}
 #content .section.active + .section.active > h3:first-child{margin-top:26px}
-/* 增量：标题下的内容缩进一级；内容里的下级标题会再开一层 .h-body，
-   缩进逐层累加，标题本身不缩进 —— 层级由缩进表达。
-   左侧预留 2px 透明边框，hover 时显形为引导线（不产生布局位移）；
-   padding 用 calc 扣掉边框宽度，保证每层仍是 1rem 的节奏 */
+/* 标题下的内容缩进一级；内容里的下级标题再开一层 .h-body，层级由缩进表达。
+   左侧 2px 透明边框在 hover 时显形为引导线，宽度已用 calc 扣掉，不产生位移 */
 #content .h-body{border-left:2px solid transparent;padding-left:calc(1rem - 2px)}
 #content .h-body:hover{border-left-color:var(--border-strong)}
 
@@ -55,13 +57,13 @@ hr{border:0;border-top:1px solid var(--border);margin:28px 0}
 .badge--required{color:var(--c-danger);background:var(--c-danger-bg)}
 .badge--optional{color:var(--text-faint);background:var(--bg-inset);font-weight:500}
 .badge--default{color:var(--c-info);background:var(--c-info-bg)}
-/* 增量：语义别名（--danger 同 --required、--info 同 --default、--muted 同 --optional） */
+/* 语义别名：--danger 同 --required、--info 同 --default、--muted 同 --optional */
 .badge--danger,.badge--deprecated{color:var(--c-danger);background:var(--c-danger-bg)}
 .badge--success{color:var(--c-success);background:var(--c-success-bg)}
 .badge--warning{color:var(--c-warn);background:var(--c-warn-bg)}
 .badge--info{color:var(--c-info);background:var(--c-info-bg)}
 .badge--muted{color:var(--text-faint);background:var(--bg-inset);font-weight:500}
-/* 增量：标题内与侧栏内的徽章 */
+/* 章节标题内的徽章 */
 #content .section > h1 > .badge,
 #content .section > h2 > .badge,
 #content .section > h3 > .badge{margin-left:10px;vertical-align:middle}
@@ -76,7 +78,8 @@ hr{border:0;border-top:1px solid var(--border);margin:28px 0}
 /* Callout */
 .callout{display:flex;gap:12px;margin:18px 0;padding:12px 16px;border-radius:var(--radius);
   border-left:4px solid var(--c-note);background:var(--c-note-bg);font-size:14.5px}
-.callout__icon{flex:none;font-weight:700;color:var(--c-note)}
+.callout__icon{flex:none;width:18px;height:18px;margin-top:2px;color:var(--c-note)}
+.callout__icon svg{display:block;fill:currentColor}
 .callout__body{min-width:0}
 .callout__body p:last-child{margin-bottom:0}
 .callout--info{border-left-color:var(--c-info);background:var(--c-info-bg)}
@@ -87,13 +90,14 @@ hr{border:0;border-top:1px solid var(--border);margin:28px 0}
 .callout--danger .callout__icon{color:var(--c-danger)}
 .callout--tip{border-left-color:var(--c-success);background:var(--c-success-bg)}
 .callout--tip .callout__icon{color:var(--c-success)}
-/* 增量：模板输出 .callout__title 但漏了样式 */
 .callout__title{font-weight:650;margin:0 0 6px;color:var(--text)}
 
 /* duo 双栏 */
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0}
 .duo__col{min-width:0}
 .duo__label{font-size:12px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px}
+
+/* 表格 */
 table{width:100%;border-collapse:collapse;font-size:14px}
 thead th{position:sticky;top:0;z-index:2;background:var(--bg-subtle);text-align:left;font-weight:650;padding:10px 14px;
   border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text-muted);font-size:12.5px;
@@ -105,7 +109,6 @@ tbody tr:hover{background:var(--accent-soft)}
 td .field{font-family:var(--font-mono);font-size:13px;font-weight:600;white-space:nowrap}
 td .type{font-family:var(--font-mono);font-size:12.5px;color:var(--text-muted)}
 td .ex{font-family:var(--font-mono);font-size:12.5px;color:var(--c-warn);word-break:break-all}
-td .desc{color:var(--text-muted);font-size:13.5px}
 
 /* 可折叠树形首列 */
 td.tree{white-space:nowrap}
@@ -142,18 +145,25 @@ tbody tr.is-hidden{display:none}
 .copy-btn.done{color:#1a7f37;border-color:#1a7f37}
 pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.65;tab-size:2}
 pre code{background:none;padding:0;font-size:inherit}
-/* 模板内置正则高亮器的 token 类：现已改由 highlight.js 接管，保留备用 */
-.k{color:var(--code-k)}.s{color:var(--code-s)}.c{color:var(--code-c);font-style:italic}
-.n{color:var(--code-n)}.f{color:var(--code-f)}
-/* highlight.js 主题自带 1em 内边距与背景，这里让外层 .codeblock / pre 的样式保持唯一 */
+/* 覆盖 highlight.js 主题自带的 padding 与背景，保持外层 .codeblock / pre 样式唯一 */
 .codeblock pre code.hljs{padding:0;background:transparent}
+
+/* 数学公式：未渲染时居中显示 $$…$$ 原文；超宽可横向滚动（长公式不撑破版心） */
+.math-block{margin:16px 0;padding:2px 0;overflow-x:auto;overflow-y:hidden;text-align:center}
+/* 渲染成功后由 MathJax 自带居中与前后留白，外层让位避免出现双份间距 */
+.math-block:has(mjx-container){margin:0;padding:0;text-align:left}
+.math-block mjx-container,.math-inline mjx-container{color:inherit}
+/* 无障碍副本（给屏幕阅读器的 MathML）只该被读、不该被看见 */
+.math-block mjx-assistive-mml,.math-inline mjx-assistive-mml{
+  position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;
+  clip:rect(1px,1px,1px,1px)!important}
 
 /* details */
 details{border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin:14px 0;background:var(--bg-subtle)}
 summary{cursor:pointer;font-size:14px;font-weight:600}
 details[open] summary{margin-bottom:10px}
 
-/* 增量：任务列表 */
+/* 任务列表 */
 .tasklist{list-style:none;padding-left:2px}
 .tasklist li.task{margin-bottom:6px}
 .tasklist input[type="checkbox"]{margin-right:7px;vertical-align:-1px;accent-color:var(--accent)}

@@ -1,12 +1,4 @@
-/* tokens.css —— 设计令牌（深浅色）与基础排版重置
-   拆分自原 index.css，按职责归入 css/ 目录。 */
-
-/* Markdown SPA Reader —— 样式移植自模板 index (2).html
-   1) 设计令牌、组件样式（badge / callout / meta-card / tabs / duo / table / codeblock）
-      与模板保持一致；
-   2) 侧栏项由模板的 `.sidebar a` 改为 `.sidebar .toc-row`（需要容纳折叠箭头）；
-   3) 新增处均以「增量」标注：右栏可隐藏的 grid、.callout__title、任务列表、
-      章节页首个标题去上边距、章节切换淡入。 */
+/* tokens.css —— 设计令牌（深浅两套）与基础排版。 */
 
 /* ============ 设计令牌 ============ */
 :root{
@@ -49,6 +41,6 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 
-/* ============ 文件树（样式移植自 file-tree.html 参考实现） ============ */
+/* ============ 文件树配色 ============ */
 :root{--ft-dir:#54aeff;--ft-file:#8c959f}
 [data-theme="dark"]{--ft-dir:#4493f8;--ft-file:#6e7681}

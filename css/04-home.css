@@ -1,11 +1,8 @@
-/* home.css —— 首页与文件树（样式移植自 file-tree.html 参考实现）
-   拆分自原 index.css，按职责归入 css/ 目录。 */
+/* home.css —— 首页与文件树样式。 */
 
-/* 空状态（没有打开任何文档）：目录栏与拖动条没有意义，索性收起，提示占满整宽 */
-body.is-empty .shell,body.is-home .shell{grid-template-columns:minmax(0,1fr)}
-body.is-empty .sidebar,body.is-empty .resizer,body.is-empty .menu-btn,
+/* 首页：没有目录树可看，收起侧栏、拖动条与 ☰ */
+body.is-home .shell{grid-template-columns:minmax(0,1fr)}
 body.is-home .sidebar,body.is-home .resizer,body.is-home .menu-btn{display:none}
-body.is-empty .brand{display:block}
 
 /* 首页（文件与目录管理）：无章节、无目录树，整块是一张列表 */
 .home{padding:26px 2px 80px;max-width:1000px;margin:0 auto}
@@ -35,13 +32,14 @@ body.is-empty .brand{display:block}
 .home__dirhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .home__dirname{font-weight:650;font-size:13.5px}
 
+/* 过滤框与卡片工具条 */
 .home__bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
 .search{position:relative;flex:1;min-width:180px;max-width:280px}
 .search input{width:100%;font:inherit;font-size:13px;padding:5px 26px 5px 27px;color:var(--text);
   background:var(--bg);border:1px solid var(--border);border-radius:6px;outline:none}
 .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .search input::placeholder{color:var(--text-faint)}
-/* type="search" 在 Chromium/Safari 自带一个清除按钮，会和自绘的 .search__clear 变成两个 ✕ */
+/* 去掉 type="search" 自带的清除按钮，只保留自绘的 .search__clear */
 .search input::-webkit-search-cancel-button,
 .search input::-webkit-search-decoration{-webkit-appearance:none;appearance:none;display:none}
 .search__icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:12px;
@@ -50,6 +48,7 @@ body.is-empty .brand{display:block}
   background:none;color:var(--text-faint);cursor:pointer;font-size:12px;line-height:1;padding:3px 5px;border-radius:4px}
 .search__clear:hover{color:var(--text);background:var(--bg-inset)}
 
+/* 文件树 */
 .ftree{padding:6px 4px;max-height:560px;overflow:auto;outline:none}
 .ftree:focus-visible{box-shadow:inset 0 0 0 2px var(--accent-soft)}
 .ftree__node{position:relative}
@@ -64,9 +63,7 @@ body.is-empty .brand{display:block}
 .ftree__children::before{content:'';position:absolute;left:17px;top:0;bottom:7px;width:1px;background:var(--border)}
 .ftree__children[hidden]{display:none}
 
-/* 折叠按钮（箭头旋转 + 加载转圈）
-   注意：.tree-toggle / .tree-count 在 markdown 可折叠表格里已有同名样式，
-   这里一律限定在 .ftree 作用域内，避免互相覆盖。 */
+/* 折叠按钮（箭头旋转 + 加载转圈）；与 markdown 折叠表格的同名类靠 .ftree 作用域隔离 */
 .ftree .tree-toggle{appearance:none;border:0;background:none;padding:0;margin:0;flex:none;
   width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;
   cursor:pointer;color:var(--text-muted);border-radius:4px}

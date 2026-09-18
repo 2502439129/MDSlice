@@ -1,17 +1,24 @@
-/* home.js —— 首页界面：目录列表、文件树渲染与交互（过滤、键盘、展开折叠、打开文件）。
+/* home.js —— 首页界面：目录列表、文件树渲染与交互（过滤、键盘导航、展开折叠、打开文件）。
    本文件属于 MDSlice 的拆分模块，加载顺序见 MDSlice.html（共享全局作用域，无需打包）。 */
 'use strict';
 
-  /* ---- 渲染与交互 ---- */
+  /* ---- 首页内容 ---- */
+  /** 建立首页标签：固定放在第一个位置，不可关闭（kind='home'）。 */
+  function createHomeTab() {
+    var tab = createTab('首页', '', 'home');
+    var at = tabs.indexOf(tab);
+    if (at > 0) { tabs.splice(at, 1); tabs.unshift(tab); }
+    return tab;
+  }
+  /** 重建首页内容，并保留滚动位置与过滤框焦点（目录异步加载完成时会频繁调用）。 */
   function refreshHomeNow() {
     var t = homeTab();
     if (!t) return;
-    var y = (t === activeTab) ? (window.pageYOffset || document.documentElement.scrollTop || 0) : 0;
-    // 重建会丢掉过滤框焦点：记下来，重建后还原（否则目录加载完成时打字会被打断）
+    var y = (t === activeTab) ? scrollY() : 0;
     var ae = document.activeElement;
     var focusFilter = t === activeTab && ae && ae.id === 'homeFilter';
     var caret = focusFilter ? ae.selectionStart : 0;
-    renderTab(t);                                         // 走 renderTab 的 home 分支
+    renderTab(t);
     if (t === activeTab) {
       scrollToY(y);
       if (focusFilter) {
@@ -23,18 +30,14 @@
       }
     }
   }
+  /** 标记首页待重建；首页正显示时立即重建（如「已打开的文件」发生了变化）。 */
   function markHomeDirty() {
     var t = homeTab();
     if (!t) return;
     t.rendered = false;
-    // 首页正显示着（例如在首页里点了「关闭」）：立刻重建，否则「已打开」标记会停在旧状态
     if (t === activeTab) refreshHomeNow();
   }
-  function openTabByKey(key) {
-    var hit = null;
-    tabs.forEach(function (t) { if (!hit && t.kind !== 'home' && t.key === key) hit = t; });
-    return hit;
-  }
+  /** 渲染首页：已打开的文件列表 + 各目录的文件树（首页无章节，两个导航容器留空）。 */
   function renderHome(tab) {
     tab.sections = [];
     tab.sectionById = Object.create(null);
@@ -48,6 +51,7 @@
     tab.rendered = true;
     bindHome(tab);
   }
+  /** 生成首页的 HTML：头部统计 + 提示条 + 已打开的文件 + 每个目录的卡片与文件树。 */
   function homeHtml() {
     var docs = tabs.filter(function (t) { return t.kind !== 'home'; });
     var h = '<div class="home">' +
@@ -72,7 +76,7 @@
     }
 
     h += '<h3 class="home__sec">目录</h3>';
-    if (homeDirs.length) {                                  // 过滤 + 展开/折叠全部（参考实现的卡片工具条）
+    if (homeDirs.length) {                                  // 过滤框 + 展开/折叠全部
       h += '<div class="home__bar"><div class="search"><span class="search__icon">🔍</span>' +
         '<input id="homeFilter" type="search" placeholder="过滤文件或目录…" autocomplete="off" value="' +
         esc(homeFilterRaw) + '">' +
@@ -80,15 +84,16 @@
         '</div><button class="tbtn" data-act="expand-all">展开全部</button>' +
         '<button class="tbtn" data-act="collapse-all">折叠全部</button></div>';
     }
-    if (!homeDirs.length) h += '<p class="home__none">' + EMPTY_TIP + '</p>';
+    if (!homeDirs.length) h += '<p class="home__none">' +
+      '点右上角「打开 MD」选择文件，或把 <code>.md</code> 拖到页面任意位置。</p>';
     homeDirs.forEach(function (d) {
       h += '<div class="home__dir"><div class="home__dirhead">' +
         '<span class="home__dirname">' + esc(d.name) + '/</span>' +
         '<span class="home__path">' + (d.source === 'server' ? '静态服务器 · 自动列出同目录'
           : (d.source === 'dropped' ? '拖入的文件夹' : '选择的文件夹')) + '</span>' +
         (d.source === 'server'
-          ? '<button class="tbtn home__btn" data-act="reload" data-id="' + nodeId(d) + '">刷新</button>' : '') +
-        '<button class="tbtn home__btn" data-act="rmdir" data-id="' + nodeId(d) + '">移除</button>' +
+          ? '<button class="tbtn home__btn" data-act="reload" data-id="' + ensureNodeId(d) + '">刷新</button>' : '') +
+        '<button class="tbtn home__btn" data-act="rmdir" data-id="' + ensureNodeId(d) + '">移除</button>' +
         '</div>';
       if (d.loading) h += '<div class="home__err">读取中…</div>';
       else if (d.error === 'shadow') h += '<div class="home__err">服务器返回的是同目录的 <code>index.html</code> 页面，' +
@@ -107,9 +112,9 @@
 
     return h + '</div>';
   }
-  /* 结构移植自 file-tree.html 参考实现：
-     .ftree__node > (.ftree__row + .ftree__children)
-     行内固定顺序：[折叠箭头 17px][图标 16px][名字][数量胶囊][meta] */
+  /** 递归生成文件树 HTML。
+      结构：.ftree__node > (.ftree__row + .ftree__children)；行内固定顺序为
+      [折叠按钮 17px][图标 16px][名字][数量胶囊][已打开标记]。 */
   function treeHtml(node) {
     var h = '';
     visibleChildren(node).forEach(function (c) {          // 空目录（递归不含 markdown）不渲染
@@ -117,7 +122,7 @@
       var vkids = isDir ? visibleChildren(c) : [];
       var opened = !isDir && !!openTabByKey(keyOfNode(c));
       h += '<div class="ftree__node"><div class="ftree__row' + (c.id === homeSel ? ' is-selected' : '') +
-        '" data-act="' + (isDir ? 'folder' : 'open') + '" data-id="' + nodeId(c) + '">';
+        '" data-act="' + (isDir ? 'folder' : 'open') + '" data-id="' + ensureNodeId(c) + '">';
       if (isDir) {
         h += '<button class="tree-toggle' + (c.loading ? ' is-loading' : '') + '" type="button" aria-expanded="' +
           (c.expanded ? 'true' : 'false') + '">' +
@@ -126,7 +131,7 @@
       } else {
         h += '<span class="tree-toggle tree-toggle--leaf"></span>';           // 占位，保持名字对齐
       }
-      h += ftIcon(isDir, c.expanded, c.name) + '<span class="ftree__name">' + markName(c.name) + '</span>';
+      h += fileTreeIcon(isDir, c.expanded, c.name) + '<span class="ftree__name">' + markName(c.name) + '</span>';
       if (isDir && c.loaded && vkids.length) {
         h += '<span class="tree-count">' + vkids.length + '</span>';
       }
@@ -145,8 +150,9 @@
     });
     return h;
   }
+  /** 给首页容器绑定事件委托（点击、过滤输入、键盘），只绑一次。 */
   function bindHome(tab) {
-    if (tab.homeBound) return;                            // 只绑一次（pane 元素长期存在）
+    if (tab.homeBound) return;                            // pane 元素长期存在，不需要重复绑定
     tab.homeBound = true;
     tab.dom.pane.addEventListener('click', function (e) {
       var el = e.target.closest ? e.target.closest('[data-act]') : null;
@@ -162,7 +168,7 @@
       if (act === 'folder' || act === 'open') {
         var row = el.classList.contains('ftree__row') ? el
           : (el.closest ? el.closest('.ftree__row') : null);
-        if (row) selectRow(row);                     // 先选中：键盘导航的锚点
+        if (row) selectRow(row);                     // 先选中，作为键盘导航的锚点
         if (act === 'folder') toggleFolder(id); else openHomeFile(id);
         return;
       }
@@ -181,7 +187,8 @@
     });
   }
 
-  /** 选中某一行（键盘导航的锚点；样式见 .ftree__row.is-selected） */
+  /* ---- 选中与展开 ---- */
+  /** 选中一行（键盘导航的锚点；样式见 .ftree__row.is-selected）。 */
   function selectRow(row) {
     var t = homeTab();
     if (!t || !row) return;
@@ -189,17 +196,16 @@
     row.classList.add('is-selected');
     homeSel = row.getAttribute('data-id');
   }
-  function childWrap(nodeEl) {
+  /** 取某个 .ftree__node 的子级容器 .ftree__children。 */
+  function findChildrenWrap(nodeEl) {
     for (var i = 0; i < nodeEl.children.length; i++) {
       if (nodeEl.children[i].classList.contains('ftree__children')) return nodeEl.children[i];
     }
     return null;
   }
-  /** 展开/折叠全部。
-      折叠：纯状态操作，立即生效。
-      展开：递归展开每个目录；遇到尚未加载的服务器子目录就按需加载后再展开其子级
-      （与参考实现的 expandAll 一致，请求数 = 目录数，由用户主动触发）。
-      注意：homeDirs 里的根节点没有 type 字段，只能用 children 判断是不是目录。 */
+  /** 展开 / 折叠全部目录。
+      折叠是纯状态操作；展开会递归展开每个目录，遇到未加载的服务器子目录先按需加载再展开。
+      homeDirs 里的根节点没有 type 字段，所以只能用 children 判断是不是目录。 */
   function setAllExpanded(open) {
     if (!open) {
       homeDirs.forEach(function collapse(d) {
@@ -219,7 +225,18 @@
     }
     Promise.all(homeDirs.map(step)).then(function () { refreshHomeNow(); });
   }
-  /** 过滤：直接改已渲染的 DOM（不重建，输入框焦点与光标不丢） */
+  /** 展开或折叠一个目录；服务器子目录首次展开时按需读取。 */
+  function toggleFolder(id) {
+    var n = homeNodes[id];
+    if (!n || n.type !== 'dir') return;
+    if (n.expanded) { n.expanded = false; refreshHomeNow(); return; }
+    n.expanded = true;
+    if (n.url && !n.loaded && !n.loading) { refreshHomeNow(); loadServerDir(n); return; }
+    refreshHomeNow();
+  }
+
+  /* ---- 过滤 ---- */
+  /** 应用过滤关键字：直接改已渲染的 DOM（不重建，输入框焦点与光标不丢）。 */
   function applyFilter(kw) {
     var t = homeTab();
     if (!t) return;
@@ -230,7 +247,7 @@
     var clearBtn = t.dom.pane.querySelector('[data-act="clear-filter"]');
     if (clearBtn) clearBtn.hidden = !homeFilterRaw;
 
-    root.querySelectorAll('.ftree__name').forEach(function (el) {      // 还原名字、清掉高亮
+    root.querySelectorAll('.ftree__name').forEach(function (el) {      // 先还原名字、清掉高亮
       if (el.dataset.raw != null) { el.textContent = el.dataset.raw; delete el.dataset.raw; }
     });
     if (!homeFilter) {
@@ -244,12 +261,11 @@
       var name = nm.textContent, i = name.toLowerCase().indexOf(homeFilter);
       if (i < 0) return;
       nm.dataset.raw = name;
-      nm.innerHTML = esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + homeFilter.length)) + '</mark>' +
-        esc(name.slice(i + homeFilter.length));
+      nm.innerHTML = markHtml(name, homeFilter);
       for (var node = row.parentElement; node; node = node.parentElement) {
         if (!node.classList || !node.classList.contains('ftree__node')) continue;
         node.style.display = '';                            // 露出命中项及其祖先
-        var cw = childWrap(node);
+        var cw = findChildrenWrap(node);
         if (cw) {
           cw.hidden = false;                                // 展开祖先
           var rid = node.querySelector('.ftree__row');
@@ -259,6 +275,7 @@
       }
     });
   }
+  /** 清空过滤框并恢复整棵树。 */
   function clearFilter() {
     var t = homeTab();
     if (!t) return;
@@ -267,7 +284,9 @@
     applyFilter('');
     if (inp) inp.focus();
   }
-  /** 行是否可见（祖先容器没被折叠、也没被过滤隐藏） */
+
+  /* ---- 键盘导航 ---- */
+  /** 行是否可见（祖先容器没被折叠、也没被过滤隐藏）。 */
   function rowVisible(row) {
     for (var el = row.parentElement; el; el = el.parentElement) {
       if (!el.classList) continue;
@@ -276,7 +295,7 @@
     }
     return true;
   }
-  /** 键盘导航：↑↓ 移动，←→ 折叠/展开，Enter 打开 */
+  /** 树内键盘操作：↑↓ 移动选中，←→ 折叠 / 展开，Enter / 空格打开。 */
   function onTreeKey(e) {
     var treeEl = e.target && e.target.closest ? e.target.closest('.ftree') : null;
     if (!treeEl) return;
@@ -301,38 +320,25 @@
       if (sel.type === 'dir') toggleFolder(sel.id); else openHomeFile(sel.id);
     }
   }
-  function toggleFolder(id) {
-    var n = homeNodes[id];
-    if (!n || n.type !== 'dir') return;
-    if (n.expanded) { n.expanded = false; refreshHomeNow(); return; }
-    n.expanded = true;
-    if (n.url && !n.loaded && !n.loading) { refreshHomeNow(); loadServerDir(n); return; }
-    refreshHomeNow();
-  }
+
+  /* ---- 打开与移除 ---- */
+  /** 打开目录里的文件为新标签页：已打开则切过去，否则读回正文再开。
+      本地目录读的是选择时拿到的 File 引用，服务器目录按 url 读取（见 openDocNode）。 */
   function openHomeFile(id) {
     var n = homeNodes[id];
     if (!n || n.type !== 'file') return;
-    var key = keyOfNode(n), dir = dirOfNode(n);
-    var open = openTabByKey(key);
-    if (open) { activateTab(open.id); return; }            // 同一份文件已打开 → 切过去，不重读
-    if (n.file) {                                          // 本地目录：读「选择目录那一刻」拿到的 File 引用
-      n.file.text().then(function (text) { openTab(n.name, text, key, dir); },
-        function () {                                      // 该文件之后被改写/删除/移动，引用会失效（浏览器报 file could not be read）
-          homeNotice = '读取 <code>' + esc(n.name) + '</code> 失败：它在加入目录之后被改动或移走了。' +
-            '重新点一次「添加目录」刷新即可。';
-          refreshHomeNow();
-        });
-      return;
-    }
-    if (!n.url) return;
-    fetch(n.url)
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-      .then(function (text) { openTab(n.name, text, key, dir); })
-      .catch(function () {
-        homeNotice = '读取 <code>' + esc(n.name) + '</code> 失败：文件被移动，或服务器拒绝访问。';
-        refreshHomeNow();
-      });
+    var open = openTabByKey(keyOfNode(n));
+    if (open) { activateTab(open.id); return; }
+
+    openDocNode(docOf(n)).catch(function () {
+      homeNotice = n.file
+        ? '读取 <code>' + esc(n.name) + '</code> 失败：它在加入目录之后被改动或移走了。' +
+          '重新点一次「添加目录」刷新即可。'                      // 该文件之后被改写 / 删除 / 移动，File 引用会失效
+        : '读取 <code>' + esc(n.name) + '</code> 失败：文件被移动，或服务器拒绝访问。';
+      refreshHomeNow();
+    });
   }
+  /** 从首页移除一个目录（不影响已打开的标签页）。 */
   function removeDir(id) {
     var d = homeNodes[id];
     if (!d) return;
