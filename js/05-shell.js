@@ -108,12 +108,29 @@
 
   /* ---- 打开本地文件 ---- */
   var fileInput = document.getElementById('fileInput');
-  document.getElementById('fileBtn').addEventListener('click', function () { fileInput.click(); });
+  document.getElementById('fileBtn').addEventListener('click', pickLocalFile);
 
-  /** 把本地文件读成新标签页（身份键用文件名，同名会替换已有标签）。 */
+  /** 「打开 MD」：优先用文件选择器取句柄（本地文件因此也能真正刷新），
+      没有该 API 的浏览器（Firefox / Safari）退回 <input> 的 File 快照。 */
+  function pickLocalFile() {
+    if (typeof window.showOpenFilePicker !== 'function') { fileInput.click(); return; }
+    window.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: 'Markdown 文档',
+                accept: { 'text/markdown': ['.md', '.markdown'], 'text/plain': ['.txt'] } }]
+    }).then(function (list) {
+      var h = list && list[0];
+      if (h) openLocalSource({ name: h.name, handle: h }, null);
+    }).catch(function (e) {
+      if (e && e.name === 'AbortError') return;             // 用户取消：什么都不做
+      showToast('无法读取这个文件：浏览器拒绝了这次访问。', 6000);
+    });
+  }
+
+  /** 把本地 File（<input> 或拖放兜底给到的快照）读成新标签页；身份键用文件名，同名会替换已有标签。 */
   function openPickedFile(file) {
     if (!file) return;
-    file.text().then(function (text) { openTab(file.name, text, 'file:' + file.name, ''); });
+    return openLocalSource({ name: file.name, file: file }, null);
   }
 
   fileInput.addEventListener('change', function (e) {
@@ -121,15 +138,12 @@
     fileInput.value = '';                                  // 清空才能再次选择同一个文件
   });
 
-  /** 页面级拖放：文件夹交给首页，单个 .md 直接打开。 */
+  /** 页面级拖放：文件夹交给首页，单个 .md 直接打开（分流逻辑见 06-dirs.js 的 handleDrop）。 */
   ['dragover', 'drop'].forEach(function (ev) {
     document.addEventListener(ev, function (e) {
       e.preventDefault();
       if (ev !== 'drop') return;
-      var dirs = droppedDirs(e.dataTransfer);              // entry 必须在事件内同步取，事件结束后会失效
-      if (dirs.length) { dirs.forEach(addDroppedDir); return; }
-      var files = e.dataTransfer && e.dataTransfer.files;
-      if (files && files[0]) openPickedFile(files[0]);
+      handleDrop(e.dataTransfer);
     });
   });
 

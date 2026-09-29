@@ -159,7 +159,7 @@
       if (!el) return;
       var act = el.getAttribute('data-act');
       var id = el.getAttribute('data-id');
-      if (act === 'add-dir') { dirInput.click(); return; }
+      if (act === 'add-dir') { pickLocalDir(); return; }
       if (act === 'tab') { activateTab(id); return; }
       if (act === 'close') { closeTab(id); return; }
       if (act === 'clear-filter') { clearFilter(); return; }
@@ -331,9 +331,9 @@
     if (open) { activateTab(open.id); return; }
 
     openDocNode(docOf(n)).catch(function () {
-      homeNotice = n.file
+      homeNotice = (n.handle || n.file)
         ? '读取 <code>' + esc(n.name) + '</code> 失败：它在加入目录之后被改动或移走了。' +
-          '重新点一次「添加目录」刷新即可。'                      // 该文件之后被改写 / 删除 / 移动，File 引用会失效
+          '重新点一次「添加目录」刷新即可。'                      // 句柄或旧的 File 引用失效（被改名 / 删除 / 移出）
         : '读取 <code>' + esc(n.name) + '</code> 失败：文件被移动，或服务器拒绝访问。';
       refreshHomeNow();
     });

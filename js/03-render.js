@@ -368,9 +368,9 @@
     return seg.join('/');
   }
 
-  /** 在目录树里按身份键找「带 File 引用」的文件节点。 */
+  /** 在目录树里按身份键找「本地文件」节点（带 File 引用或句柄的都算，见 readLocalDoc）。 */
   function nodeByKey(node, key) {
-    if (node.type === 'file' && node.file && keyOfNode(node) === key) return node;
+    if (node.type === 'file' && (node.file || node.handle) && keyOfNode(node) === key) return node;
     var kids = node.children || [];
     for (var i = 0; i < kids.length; i++) {
       var hit = nodeByKey(kids[i], key);
@@ -388,10 +388,10 @@
     return null;
   }
 
-  /** 目录树节点 → 打开文档需要的信息。 */
+  /** 目录树节点 → 打开文档需要的信息（本地文件带 handle 时每次现读，见 readLocalDoc）。 */
   function docOf(node) {
     return { name: node.name, key: keyOfNode(node), dir: dirOfNode(node),
-             url: node.url || '', file: node.file || null };
+             url: node.url || '', file: node.file || null, handle: node.handle || null };
   }
 
   /** 在子树里按 url 找节点（服务器文件节点的 url 就是它的绝对地址）。 */
@@ -497,10 +497,10 @@
     if (!info) return;
     e.preventDefault();
 
-    if (info.blocked) { showPaneNotice(info.message); return; }
+    if (info.blocked) { showToast(info.message, 9000); return; }   // 含操作指引，留久一点
     openDocNode(info.doc, info.fragment).catch(function () {
-      showPaneNotice('读取 <code>' + esc(info.doc.name) + '</code> 失败：' +
-        '文件被移动、被改动，或服务器拒绝访问。');
+      showToast('读取 <code>' + esc(info.doc.name) + '</code> 失败：' +
+        '文件被移动、被改动，或服务器拒绝访问。', 9000);
     });
   });
 

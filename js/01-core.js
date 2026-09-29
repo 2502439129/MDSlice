@@ -67,3 +67,19 @@
   function scrollY() {
     return window.pageYOffset || document.documentElement.scrollTop || 0;
   }
+
+  /** 底部轻提示：固定定位、不占文档流（出现与消失都不会挪动正文），到时自动淡出。
+      全局只保留一个元素，后到的消息覆盖前一条；不需要用户点击。 */
+  var toastEl = null, toastTimer = 0;
+  function showToast(html, ms) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'toast';
+      toastEl.setAttribute('role', 'status');
+      document.body.appendChild(toastEl);
+    }
+    toastEl.innerHTML = html;
+    toastEl.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('is-on'); }, ms || 3000);
+  }

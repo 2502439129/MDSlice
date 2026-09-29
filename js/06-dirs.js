@@ -1,4 +1,4 @@
-/* dirs.js —— 目录来源与文件树数据：本地文件夹（webkitdirectory）、拖入的文件夹、
+/* dirs.js —— 目录来源与文件树数据：本地文件夹（优先目录句柄，退回 webkitdirectory）、拖入的文件夹、
    静态服务器目录索引（懒加载 + 空目录剪枝）。只收子文件夹与 markdown，跳过常见构建/缓存目录。
    本文件属于 MDSlice 的拆分模块，加载顺序见 MDSlice.html（共享全局作用域，无需打包）。 */
 'use strict';
@@ -80,8 +80,9 @@
   }
 
   /* ---- 本地文件 → 目录树（用 webkitRelativePath 还原层级） ---- */
-  /** 把一个文件的相对路径插入树中（首段是所选文件夹名，会去掉；非 markdown 整条丢弃）。 */
-  function insertFile(root, rel, file) {
+  /** 把一个文件源插入树中（rel 首段是所选文件夹名，会去掉；非 markdown 整条丢弃）。
+      file 与 handle 二选一：有 handle 时每次打开都现读一次，因此能拿到磁盘上的最新内容。 */
+  function insertFile(root, rel, file, handle) {
     var parts = String(rel).split('/').filter(Boolean);
     parts.shift();
     if (!parts.length) return;
@@ -100,7 +101,7 @@
       }
       node = next;
     }
-    node.children.push({ name: leaf, type: 'file', file: file, parent: node });
+    node.children.push({ name: leaf, type: 'file', file: file || null, handle: handle || null, parent: node });
   }
   /** 递归排序：目录在前、同类按名称（中文按拼音）排。 */
   function sortTree(node) {
@@ -110,10 +111,11 @@
     });
     node.children.forEach(function (c) { if (c.type === 'dir') sortTree(c); });
   }
-  /** 把一批本地文件按顶层目录名加进首页（同名本地目录会替换旧的）。 */
+  /** 把一批本地文件按顶层目录名加进首页（同名本地目录会替换旧的）。
+      entries 形如 { rel, file } 或 { rel, handle }：句柄来源的项每次打开都现读。 */
   function addLocalDir(name, entries) {
     var dir = { name: name, source: 'local', children: [], expanded: true };
-    entries.forEach(function (e) { insertFile(dir, e.rel, e.file); });
+    entries.forEach(function (e) { insertFile(dir, e.rel, e.file, e.handle); });
     sortTree(dir);
     if (!dir.children.length) {
       homeNotice = '「' + esc(name) + '」里没有找到 markdown 文件（也可能都在被忽略的目录里）。';
@@ -127,6 +129,59 @@
     ensureNodeId(dir);
     homeDirs.push(dir);
     refreshHomeNow();
+  }
+
+  /* ---- 本地目录的两种取法 ----
+     句柄（FileSystemDirectoryHandle）：里面的文档之后每次打开都现读，所以本地文件也能真正刷新；
+     File 快照（webkitdirectory / entry.file()）：拿不到句柄时的退路，内容停在加入的那一刻。 */
+
+  /** 遍历目录句柄：entries() 是异步迭代器，逐个读。
+      容错与 entry 路线一致：单个条目读不动就跳过它，不让整次扫描失败。 */
+  function collectDirHandle(dirHandle, prefix, acc, depth) {
+    if (depth > MAX_DEPTH) return Promise.resolve();
+    var it = dirHandle.entries();
+    var step = function () {
+      return it.next().then(function (r) {
+        if (r.done) return;
+        return handleEntry(r.value[0], r.value[1], prefix, acc, depth + 1).then(step, step);
+      }, function () { /* 迭代中断：这一段就到此为止 */ });
+    };
+    return step();
+  }
+  /** 目录里的一个条目：文档收进 acc，子目录继续递归。
+      depth 是条目自身所在的层数，所以根目录不参与忽略规则（与 entry 路线一致，见 collectEntries）。 */
+  function handleEntry(name, h, prefix, acc, depth) {
+    if (h.kind === 'file') {
+      if (isDocName(name)) acc.push({ rel: prefix + name, handle: h });
+      return Promise.resolve();
+    }
+    if (isIgnoredDir(name)) return Promise.resolve();     // 跳过构建 / 缓存目录
+    return collectDirHandle(h, prefix + name + '/', acc, depth);
+  }
+
+  /** 把一个本地目录源（{ handle } 或 { entry }）收集完毕并加进首页（见 addLocalDir）。 */
+  function addLocalDirFromSource(src) {
+    var acc = [];
+    var walk = src.handle
+      ? collectDirHandle(src.handle, src.name + '/', acc, 0)
+      : collectEntries(src.entry, src.name + '/', acc, 0);
+    return walk.then(function () { addLocalDir(src.name, acc); })
+      .catch(function () {
+        homeNotice = '读取「' + esc(src.name) + '」失败：目录被移动或被拒绝访问。';
+        refreshHomeNow();
+      });
+  }
+
+  /** 「添加目录」：优先用目录选择器取句柄（本地文件因此也可刷新），
+      没有该 API 的浏览器（Firefox / Safari）退回 webkitdirectory 的 File 快照。 */
+  function pickLocalDir() {
+    if (typeof window.showDirectoryPicker !== 'function') { dirInput.click(); return; }
+    window.showDirectoryPicker().then(function (h) {
+      addLocalDirFromSource({ handle: h, name: h.name });
+    }).catch(function (e) {
+      if (e && e.name === 'AbortError') return;             // 用户取消：什么都不做
+      showToast('无法读取这个目录：浏览器拒绝了这次访问。', 6000);
+    });
   }
   /** 处理「添加目录」的选择结果（老浏览器没有 webkitdirectory 时退化为选单个文件）。 */
   function addLocalFromFileList(fileList) {
@@ -306,15 +361,21 @@
     return parts.length ? decodeURIComponent(parts[parts.length - 1]) : '当前目录';
   }
 
-  /* ---- 拖入的文件夹（webkitGetAsEntry 递归；readEntries 每批最多 100 条，需读到空） ---- */
-  /** 从拖放数据里取出文件夹 entry（不是文件夹的项忽略）。 */
-  function droppedDirs(dt) {
+  /* ---- 拖入的文件夹与文件 ----
+     优先 DataTransferItem.getAsFileSystemHandle()（Chromium）：拿到目录句柄后，里面的文档每次打开
+     都现读，于是「拖入」与「添加目录」表现一致；不支持时退回 webkitGetAsEntry 的 File 快照。
+     两个 API 都必须在 drop 事件里同步调用 —— 事件结束后条目就失效了。 */
+  /** 从拖放数据里收下「源」：{ handle: Promise } 或 { entry }，由 handleDrop 判断是目录还是文档。 */
+  function droppedSources(dt) {
     var out = [];
     if (!dt || !dt.items) return out;
     [].forEach.call(dt.items, function (it) {
-      if (it.kind !== 'file' || !it.webkitGetAsEntry) return;
-      var en = it.webkitGetAsEntry();
-      if (en && en.isDirectory) out.push(en);
+      if (it.kind !== 'file') return;
+      if (typeof it.getAsFileSystemHandle === 'function') {
+        try { out.push({ handle: it.getAsFileSystemHandle() }); return; } catch (e) { /* 退回 entry */ }
+      }
+      var en = it.webkitGetAsEntry ? it.webkitGetAsEntry() : null;
+      if (en) out.push({ entry: en });
     });
     return out;
   }
@@ -340,15 +401,33 @@
       })();
     });
   }
-  /** 把拖入的文件夹收集完毕并加进首页。 */
-  function addDroppedDir(entry) {
-    var acc = [];
-    collectEntries(entry, entry.name + '/', acc, 0).then(function () {
-      if (!acc.length) {
-        homeNotice = '「' + esc(entry.name) + '」里没有找到 markdown 文件。';
-        refreshHomeNow();
-        return;
+  /** 拖放分流：目录加进首页，文档直接打开；句柄与 entry 两条路在这里统一收口。 */
+  function handleDrop(dt) {
+    if (!dt) return;
+    var sources = droppedSources(dt);
+    var files = [].slice.call(dt.files || []);             // FileList 同样只在事件内有效，先拷出来
+
+    Promise.all(sources.map(function (s) {
+      if (s.entry) {                                       // 老浏览器的 entry 路径
+        var en = s.entry;
+        if (en.isDirectory) return Promise.resolve({ kind: 'dir', entry: en, name: en.name });
+        if (!isDocName(en.name)) return Promise.resolve(null);
+        return new Promise(function (res) {
+          en.file(function (f) { res({ kind: 'doc', file: f, name: f.name }); },
+                  function () { res(null); });
+        });
       }
-      addLocalDir(entry.name, acc);
+      return s.handle.then(function (h) {                  // 句柄路径：目录句柄可让文档真正刷新
+        if (!h) return null;
+        if (h.kind === 'directory') return { kind: 'dir', handle: h, name: h.name };
+        return isDocName(h.name) ? { kind: 'doc', handle: h, name: h.name } : null;
+      }, function () { return null; });
+    })).then(function (list) {
+      list = list.filter(Boolean);
+      var dirs = list.filter(function (s) { return s.kind === 'dir'; });
+      if (dirs.length) { dirs.forEach(addLocalDirFromSource); return; }
+      var doc = list.filter(function (s) { return s.kind === 'doc'; })[0];
+      if (doc) { openLocalSource(doc, null); return; }
+      if (files[0]) openPickedFile(files[0]);              // 兜底：句柄与 entry 都拿不到
     });
   }

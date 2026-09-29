@@ -1,4 +1,4 @@
-/* tabs.js —— 标签页模型：新建 / 激活 / 关闭 / 拖拽排序 / 标签条渲染 / 文档容器装配。
+/* tabs.js —— 标签页模型：新建 / 激活 / 关闭 / 拖拽排序 / 双击刷新 / 标签条渲染 / 文档容器装配。
    本文件属于 MDSlice 的拆分模块，加载顺序见 MDSlice.html（共享全局作用域，无需打包）。 */
 'use strict';
 
@@ -62,6 +62,8 @@
       id: id, name: name, label: tabLabel(name), src: src, kind: kind || 'doc',
       key: 'file:' + name, dir: '',                      // 身份键与所在目录，见 openTab()
       sourceUrl: sourceUrl || '',                        // 文档自身的地址（本地打开或直接上传的为空）
+      source: null,                                      // 重新读取该文档所需的信息，见 refreshTab()
+      busy: false,                                       // 刷新进行中（标签上的 × 变成 ↻），见 setTabBusy()
       sections: [], sectionById: Object.create(null), childrenById: Object.create(null),
       activeId: null, firstId: null, scrollY: 0,
       rendered: false, empty: false,
@@ -192,36 +194,94 @@
     return tab;
   }
 
-  /** 打开一份文档：本地用 File 引用、服务器用 fetch，读完按 openTab 的流程开标签
+  /** 打开一份文档：本地用句柄 / File 引用、服务器用 fetch，读完按 openTab 的流程开标签
       （同一身份会原地重开）；fragment 非空时打开后定位到该小节。
       读取失败时返回被拒的 Promise，由调用方决定提示什么。 */
   function openDocNode(doc, fragment) {
-    var read = doc.file
-      ? doc.file.text()
+    var read = (doc.handle || doc.file)
+      ? readLocalDoc(doc)
       : fetch(doc.url).then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.text();
         });
     return read.then(function (text) {
-      openTab(doc.name, text, doc.key, doc.dir, doc.url || '');
+      var tab = openTab(doc.name, text, doc.key, doc.dir, doc.url || '');
+      tab.source = sourceOfDoc(doc);                       // 记下来源，供双击标签页刷新
       jumpToFragment(fragment);
       return true;
     });
   }
 
-  /** 在当前标签页顶部显示一条提示：只保留最新一条，点击可关，数秒后自动消失。 */
-  function showPaneNotice(html) {
-    var tab = activeTab;
-    if (!tab) return;
-    var old = tab.dom.pane.querySelector('.pane-notice');
-    if (old) old.remove();
-    var el = document.createElement('div');
-    el.className = 'pane-notice';
-    el.setAttribute('role', 'status');
-    el.innerHTML = html;
-    el.addEventListener('click', function () { el.remove(); });
-    tab.dom.pane.insertBefore(el, tab.dom.pane.firstChild);
-    setTimeout(function () { if (el.parentNode) el.remove(); }, 9000);
+  /** 打开一份本地文档：句柄（每次现读，可真正刷新）或 File 快照，二选一。 */
+  function openLocalSource(src, fragment) {
+    return openDocNode({ name: src.name, file: src.file || null, handle: src.handle || null }, fragment);
+  }
+
+  /** 读一份本地文档：有句柄就现取一次（拿得到磁盘上的最新内容），否则读 File 快照。 */
+  function readLocalDoc(src) {
+    if (src.handle) return src.handle.getFile().then(function (f) { return f.text(); });
+    return src.file.text();
+  }
+
+  /** 文档节点 / 描述对象 → 重新读取它所需的最少信息（双击标签页刷新用）。 */
+  function sourceOfDoc(doc) {
+    return { name: doc.name, key: doc.key || ('file:' + doc.name), dir: doc.dir || '',
+             url: doc.url || '', file: doc.file || null, handle: doc.handle || null };
+  }
+
+  /** 刷新期间在标签上显示「进行中」：× 变成转动的 ↻（复用同一个按钮，不引入图标资源）。
+      状态记在 tab.busy 上，标签条重建后仍能保持；结束时还原。 */
+  function setTabBusy(tab, on) {
+    tab.busy = !!on;
+    var btn = tabbar.querySelector('.tab[data-id="' + tab.id + '"] .tab__close');
+    if (!btn) return;
+    btn.classList.toggle('is-busy', !!on);
+    btn.textContent = on ? '↻' : '×';
+    btn.title = on ? '正在重新读取…' : '关闭此标签页';
+  }
+
+  /** 双击标签页：重新读取并重排这份文档，尽量停在原来那一节与滚动位置。
+      服务器文档（有 url）与带句柄的本地文件都是真的重新读取，前者绕过缓存；
+      只有 File 快照时内容不会变，此时只重排。读取期间标签被关掉的话不再重开。
+      结果用底部轻提示给出；读取失败只提示，不动原来的标签页。 */
+  function refreshTab(tab) {
+    if (!tab || tab.kind === 'home') return;
+    var src = tab.source;
+    if (!src) { showToast('这个标签页没有可重新读取的来源。'); return; }
+
+    var local = !!(src.handle || src.file);                // 本地来源：句柄或 File
+    var snapshot = !src.handle && !!src.file;              // 其中只有 File 快照时内容不会变，只能重排
+    var keepId = tab.activeId;
+    var keepY = tab === activeTab ? scrollY() : tab.scrollY;
+
+    var read = local
+      ? readLocalDoc(src)
+      : fetch(src.url, { cache: 'no-store' }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        });
+
+    var name = '<code>' + esc(src.name) + '</code>';
+    setTabBusy(tab, true);
+    return read.then(function (text) {
+      if (tabs.indexOf(tab) < 0) return false;             // 读取期间标签被关掉了：不再把它重开
+      var t = openTab(src.name, text, src.key, src.dir, src.url);
+      t.source = src;
+      t.activeId = t.sectionById[keepId] ? keepId : null;   // 原小节还在就停在那里
+      t.scrollY = keepY;
+      activateTab(t.id);                                    // 由 activateTab 去应用小节与滚动位置
+      showToast(snapshot
+        ? '已重新排版 ' + name + '。这次用的是浏览器给的快照，内容不会跟着变；' +
+          '要真正刷新，请重新拖入它或它所在的文件夹，或点「添加目录」。'
+        : '已重新读取 ' + name + '。', snapshot ? 6500 : 2600);
+      return true;
+    }).catch(function () {
+      showToast('重新读取 ' + name + ' 失败：文件被移动、改写，或服务器拒绝访问。' +
+        (local ? '请重新打开这份文件，或点「添加目录」重新选择。' : ''), 7000);
+    }).then(function (v) {
+      setTabBusy(tab, false);     // 成功时标签已被重开、按钮是新的，这一步不会改动它
+      return v;
+    });
   }
 
   /** 从集合与 DOM 中摘除标签页（不处理激活切换）。 */
@@ -265,7 +325,9 @@
       var el = document.createElement('div');
       el.className = 'tab' + (isHome ? ' tab--home' : '') + (tab === activeTab ? ' is-active' : '');
       el.dataset.id = tab.id;
-      el.title = isHome ? '首页（不可关闭）' : (tab.dir ? tab.dir + '/' + tab.name : tab.name);
+      el.title = isHome
+        ? '首页（不可关闭）'
+        : (tab.dir ? tab.dir + '/' + tab.name : tab.name) + '\n双击：重新读取并刷新';
       el.draggable = !isHome;                              // 首页固定在第一位，不参与拖拽排序
 
       if (isHome) {                                        // 首页图标取自 MDSlice.html 的 #i-home 精灵
@@ -288,15 +350,20 @@
       if (!isHome) {                                       // 首页不可关闭，不渲染 ×
         closeEl = document.createElement('button');
         closeEl.type = 'button';
-        closeEl.className = 'tab__close';
-        closeEl.title = '关闭此标签页';
-        closeEl.textContent = '×';
+        closeEl.className = 'tab__close' + (tab.busy ? ' is-busy' : '');
+        closeEl.title = tab.busy ? '正在重新读取…' : '关闭此标签页';   // 刷新中沿用「进行中」状态
+        closeEl.textContent = tab.busy ? '↻' : '×';
         el.appendChild(closeEl);
       }
 
       el.addEventListener('click', function (e) {
         if (closeEl && closeEl.contains(e.target)) { closeTab(tab.id); return; }
         if (tab !== activeTab) activateTab(tab.id);
+      });
+
+      el.addEventListener('dblclick', function (e) {     // 双击标签页：重读并重排本页文档
+        if (closeEl && closeEl.contains(e.target)) return;
+        refreshTab(tab);
       });
 
       el.addEventListener('dragstart', function (e) {
