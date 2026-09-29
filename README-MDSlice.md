@@ -2,8 +2,8 @@
 
 ---
 title: MDSlice 使用说明
-version: V1.2.0
-updated: 2026-09-29
+version: V1.3.0
+updated: 2026-09-30
 scope: 单文件 Markdown 章节阅读器（零构建 / 零后端）
 ---
 
@@ -90,7 +90,7 @@ npx http-server -p 8080 -o
 
 ---
 title: 本应用语法
-updated: 2026-09-29
+updated: 2026-09-30
 scope: 每种语法的写法，以及可直接看到效果的示例
 ---
 
