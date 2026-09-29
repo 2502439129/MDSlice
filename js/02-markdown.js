@@ -104,14 +104,17 @@
   }
 
   /* ---- 列表 ---- */
+  /** 任务复选框标记：列表任务项与表格首列待办共用同一份内容，两处外观因此一致
+      （disabled 只表示不可交互，勾选状态由文档里的 `[ ]` / `[x]` 决定）。 */
+  function taskBox(done) {
+    return '<input type="checkbox" disabled' + (done ? ' checked' : '') + '>';
+  }
+
   /** 生成一个列表项：`[x]` / `[ ]` 开头视为任务项。 */
   function makeItem(text) {
     var tm = text.match(TASK_RE);
     if (tm) {
-      return {
-        task: true,
-        html: '<input type="checkbox" disabled' + (tm[1].toLowerCase() === 'x' ? ' checked' : '') + '> ' + inline(tm[2])
-      };
+      return { task: true, html: taskBox(tm[1].toLowerCase() === 'x') + ' ' + inline(tm[2]) };
     }
     return { task: false, html: inline(text) };
   }
@@ -414,11 +417,17 @@
   function renderTable(head, rows, aligns) {
     var cols = columnProfiles(head, aligns);
 
-    /* 1) 解析首列层级 */
+    /* 1) 解析首列：树形层级，以及树形前缀之后的待办标记（`[ ]` / `[x]`） */
     var meta = rows.map(function (r) {
       var t = splitTree(r[0] === undefined ? '' : r[0]);
-      return { level: t.level, html: cellHtml(t.text, cols[0].semantic) };
+      var task = t.text.match(TASK_RE);
+      return {
+        level: t.level,
+        done: task ? task[1].toLowerCase() === 'x' : null,   // null = 这一行没有待办标记
+        html: cellHtml(task ? task[2] : t.text, cols[0].semantic)
+      };
     });
+    var hasTask = meta.some(function (m) { return m.done !== null; });   // 首列是不是待办列
 
     /* 2) 建立父子关系 */
     var parentOf = new Array(rows.length).fill(-1);
@@ -457,7 +466,7 @@
         '</div>'
       : '';
 
-    h += '<div class="table-wrap"><table><thead><tr>';
+    h += '<div class="table-wrap"><table' + (hasTask ? ' class="task-col"' : '') + '><thead><tr>';
     cols.forEach(function (c) { h += '<th' + alignStyle(c.align) + '>' + inline(c.label) + '</th>'; });
     h += '</tr></thead><tbody>';
 
@@ -482,6 +491,8 @@
           } else if (m.level > 0) {
             inner = '<span class="tree-mark">└</span>';
           }
+          // 首列的装饰顺序：折叠 / 树形缩进 → 待办复选框 → 文案 → 子项计数
+          if (m.done !== null) inner += taskBox(m.done);
           inner += m.html;
           if (kids.length) inner += '<span class="tree-count">' + descendants(idx) + '</span>';
           h += '<td class="tree" data-level="' + m.level + '" data-label="' + esc(c.label) + '"' +
