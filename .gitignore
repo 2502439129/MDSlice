@@ -3,3 +3,4 @@ doc/
 *.zip
 
 .version.md
+pack.ps1

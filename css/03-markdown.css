@@ -163,7 +163,15 @@ details{border:1px solid var(--border);border-radius:var(--radius);padding:10px 
 summary{cursor:pointer;font-size:14px;font-weight:600}
 details[open] summary{margin-bottom:10px}
 
-/* 任务列表 */
-.tasklist{list-style:none;padding-left:2px}
-.tasklist li.task{margin-bottom:6px}
-.tasklist input[type="checkbox"]{margin-right:7px;vertical-align:-1px;accent-color:var(--accent)}
+/* 任务列表：与普通列表同一套悬挂缩进 —— 22px 标记区留在 li 自己身上，
+   复选框绝对定位到这块标记区里（left:0 = li 的 padding box 左缘，正好是标记区起点）。
+   于是文字列固定在 22px，折行与首行左对齐。 */
+.tasklist{list-style:none;padding-left:0}
+.tasklist > li{padding-left:22px}
+/* 混写时（同一列表里既有 [ ] 项也有普通项）普通项仍保留标记 */
+ul.tasklist > li:not(.task){list-style:disc}
+ol.tasklist > li:not(.task){list-style:decimal}
+.tasklist > li.task{list-style:none;position:relative;margin-bottom:6px}
+.tasklist > li.task > input[type="checkbox"]{
+  /* 纵向按正文行高（28px）与复选框高度（13px）居中在首行里 */
+  position:absolute;left:0;top:calc((28px - 13px) / 2);margin:0;accent-color:var(--accent)}
