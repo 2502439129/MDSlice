@@ -109,6 +109,8 @@ tbody tr:hover{background:var(--accent-soft)}
 td .field{font-family:var(--font-mono);font-size:13px;font-weight:600;white-space:nowrap}
 td .type{font-family:var(--font-mono);font-size:12.5px;color:var(--text-muted)}
 td .ex{font-family:var(--font-mono);font-size:12.5px;color:var(--c-warn);word-break:break-all}
+/* 取值不在该列允许范围内的单元格（如 `必填` 列写成「否」）：标红示警，悬停给出正确取值 */
+td .invalid{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--c-danger);word-break:break-all}
 
 /* 可折叠树形首列 */
 td.tree{white-space:nowrap}

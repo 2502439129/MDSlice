@@ -312,9 +312,17 @@
     return html;
   }
 
-  /* ---- 表格（└ 折叠树 / [[必填]] 徽章 / 单元格自动分类） ---- */
-  /** 表头命中这些列名时，单元格才做自动分类。 */
-  var SMART_HEADS = ['字段', '类型', '必填', '示例值', '说明', '默认值', '参数', '名称'];
+  /* ---- 表格（└ 折叠树 / [[必填]] 徽章 / 逐列自动分类） ---- */
+  /** 列名 → 列语义：**逐列**命中，只作用于该列里「整格恰好是一个行内代码」的单元格。
+      未命中的列（如 `语法` / `备注`）一律走普通行内解析，不会被别的列牵连。 */
+  var COLUMN_SEMANTIC = {
+    '必填': 'required', '类型': 'type',
+    '示例值': 'example', '默认值': 'example',
+    '字段': 'code', '说明': 'code', '参数': 'code', '名称': 'code'
+  };
+
+  /** `example` 语义下「像字面量」的取值：数组、引号串、布尔、null、数字。 */
+  var LITERAL_VALUE = /^(\[.*\]|".*"|'.*'|true|false|null|-?\d+(\.\d+)?)$/;
 
   /** 按未转义的 | 拆一行表格，`\|` 还原成字面竖线。 */
   function splitRow(line) {
@@ -343,10 +351,9 @@
     });
   }
 
-  /** 单元格的对齐属性（该列没设对齐时返回空串）。 */
-  function alignAttr(aligns, k) {
-    var a = aligns && aligns[k];
-    return a ? ' style="text-align:' + a + '"' : '';
+  /** 对齐属性（列画像里的 align 为空时返回空串）。 */
+  function alignStyle(align) {
+    return align ? ' style="text-align:' + align + '"' : '';
   }
 
   var TREE_CHARS = /[└├│┌┬─]/g;                          // 首列树形前缀字符，每个计一层
@@ -358,18 +365,34 @@
     return { level: (prefix.match(TREE_CHARS) || []).length, text: String(raw).slice(prefix.length) };
   }
 
-  /** 渲染一个单元格：smart 且整格是行内代码时按列名分类（徽章 / 等宽 / 橙色字面量）。 */
-  function cell(raw, label, smart) {
+  /** 逐列画像：语义标签（列名未命中已知语义时为 ''）与对齐方式；首列还额外承担树形与折叠。
+      识别结果在这里固化成数据，渲染阶段只负责按画像翻译，不再做判定。 */
+  function columnProfiles(head, aligns) {
+    return head.map(function (h, k) {
+      var semantic = COLUMN_SEMANTIC[String(h).trim()];
+      return {
+        label: String(h),
+        // 只认映射表自己的字符串值：列名撞上原型键（constructor 一类）不算命中
+        semantic: typeof semantic === 'string' ? semantic : '',
+        align: (aligns && aligns[k]) || '',
+        first: k === 0
+      };
+    });
+  }
+
+  /** 单元格的基础呈现：整格恰好是一个行内代码、且该列有语义时按语义变样式
+      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽），其余情况一律走普通行内解析。 */
+  function cellHtml(raw, semantic) {
     var txt = raw === undefined || raw === null ? '' : String(raw);
     var codeOnly = txt.match(/^`([^`]+)`$/);
-    if (!smart || !codeOnly) return inline(txt);
+    if (!semantic || !codeOnly) return inline(txt);
 
     var v = codeOnly[1];                                 // 纯文本：\| 已在 splitRow 还原
-    if (label === '必填') return '<span class="badge badge--required">必填</span>';
-    if (label === '类型') return '<span class="type">' + esc(v) + '</span>';
+    if (semantic === 'required') return requiredCell(v);
+    if (semantic === 'type') return '<span class="type">' + esc(v) + '</span>';
 
-    if (label === '示例值' || label === '默认值') {
-      return /^(\[.*\]|".*"|'.*'|true|false|null|-?\d+(\.\d+)?)$/.test(v)
+    if (semantic === 'example') {
+      return LITERAL_VALUE.test(v)
         ? '<span class="ex">' + esc(v) + '</span>'
         : '<span class="field">' + esc(v) + '</span>';
     }
@@ -377,15 +400,24 @@
     return '<span class="field">' + esc(v) + '</span>';
   }
 
+  /** `必填` 列只接受两种取值（首尾空白不算差异）：各自给对应徽章；
+      其余取值不在允许范围内，标红并附提示，让写错的地方在正文里直接看得见。 */
+  function requiredCell(text) {
+    var v = text.trim();
+    if (v === '必填') return '<span class="badge badge--required">必填</span>';
+    if (v === '选填') return '<span class="badge badge--optional">选填</span>';
+    return '<span class="invalid" title="必填列只接受 必填 / 选填">' + esc(text) + '</span>';
+  }
+
   /** 渲染表格：首列用树形前缀表达层级，带子项的父行可单独折叠（工具条可全折 / 全展）；
-      列对齐由 aligns（来自分隔行的冒号）决定。 */
+      列语义与列对齐都取自列画像（columnProfiles）——除首列层级外，渲染阶段不再自行判定。 */
   function renderTable(head, rows, aligns) {
-    var smart = head.some(function (h) { return SMART_HEADS.indexOf(String(h).trim()) >= 0; });
+    var cols = columnProfiles(head, aligns);
 
     /* 1) 解析首列层级 */
     var meta = rows.map(function (r) {
       var t = splitTree(r[0] === undefined ? '' : r[0]);
-      return { level: t.level, html: cell(t.text, head[0], smart) };
+      return { level: t.level, html: cellHtml(t.text, cols[0].semantic) };
     });
 
     /* 2) 建立父子关系 */
@@ -426,7 +458,7 @@
       : '';
 
     h += '<div class="table-wrap"><table><thead><tr>';
-    head.forEach(function (c, k) { h += '<th' + alignAttr(aligns, k) + '>' + inline(c) + '</th>'; });
+    cols.forEach(function (c) { h += '<th' + alignStyle(c.align) + '>' + inline(c.label) + '</th>'; });
     h += '</tr></thead><tbody>';
 
     rows.forEach(function (r, idx) {
@@ -438,8 +470,9 @@
       h += '<tr' + (gid ? ' class="row-parent" data-own="' + gid + '"' : '') +
            (anc ? ' data-anc="' + anc + '"' : '') + '>';
 
-      for (var k = 0; k < head.length; k++) {
-        if (k === 0) {
+      for (var k = 0; k < cols.length; k++) {
+        var c = cols[k];
+        if (c.first) {
           var inner = '';
           if (kids.length) {
             inner = '<button class="tree-toggle" type="button" aria-expanded="true"' +
@@ -451,11 +484,11 @@
           }
           inner += m.html;
           if (kids.length) inner += '<span class="tree-count">' + descendants(idx) + '</span>';
-          h += '<td class="tree" data-level="' + m.level + '" data-label="' + esc(head[0]) + '"' +
-               alignAttr(aligns, 0) + '>' + inner + '</td>';
+          h += '<td class="tree" data-level="' + m.level + '" data-label="' + esc(c.label) + '"' +
+               alignStyle(c.align) + '>' + inner + '</td>';
         } else {
-          h += '<td data-label="' + esc(head[k]) + '"' + alignAttr(aligns, k) + '>' +
-               cell(r[k], head[k], smart) + '</td>';
+          h += '<td data-label="' + esc(c.label) + '"' + alignStyle(c.align) + '>' +
+               cellHtml(r[k], c.semantic) + '</td>';
         }
       }
       h += '</tr>';
