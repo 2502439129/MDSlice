@@ -126,7 +126,7 @@
       if (isDir) {
         h += '<button class="tree-toggle' + (c.loading ? ' is-loading' : '') + '" type="button" aria-expanded="' +
           (c.expanded ? 'true' : 'false') + '">' +
-          '<svg class="chev" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><use href="#i-chev"/></svg>' +
+          '<svg class="chev" viewBox="0 0 1024 1024" width="10" height="10" aria-hidden="true"><use href="#i-caret"/></svg>' +
           '</button>';
       } else {
         h += '<span class="tree-toggle tree-toggle--leaf"></span>';           // 占位，保持名字对齐

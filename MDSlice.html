@@ -15,11 +15,13 @@
 </head>
 <body>
 
-<!-- 图标精灵：首页标签、文件树与四种 Callout 用（fill=currentColor，颜色跟随使用处的 color） -->
+<!-- 图标精灵：首页标签、文件树、表格折叠箭头与四种 Callout 用（fill=currentColor，颜色跟随使用处的 color） -->
 <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
   <symbol id="i-folder" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"/></symbol>
   <symbol id="i-folder-open" viewBox="0 0 16 16"><path fill="currentColor" d="M0 2.75C0 1.784.784 1 1.75 1H5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.75c.966 0 1.75.784 1.75 1.75v1.5H0V2.75Z"/><path fill="currentColor" d="M0 8.25V13.25C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25V8.25H0Z" opacity=".7"/></symbol>
-  <symbol id="i-chev" viewBox="0 0 16 16"><path fill="currentColor" d="M4 6.2h8L8 11.4Z"/></symbol>
+  <!-- 折叠三角：表格首列与首页文件树共用。源图标朝上，在这里转成朝下作为「展开」基准，
+       折叠态由两处样式统一再转 -90° -->
+  <symbol id="i-caret" viewBox="0 0 1024 1024"><path fill="currentColor" transform="rotate(180 512 512)" d="M977.07 837.55 L546.56 101.12 a32.43 32.43 0 0 0 -27.73 -15.79 h-12.8 a32.43 32.43 0 0 0 -27.73 15.79 L46.93 837.55 a33.71 33.71 0 0 0 0 32.43 l5.97 9.81 a31.15 31.15 0 0 0 27.73 16.21 h862.72 a31.15 31.15 0 0 0 27.73 -16.21 l5.97 -9.81 a33.71 33.71 0 0 0 0 -32.43 Z"/></symbol>
   <symbol id="i-file" viewBox="0 0 16 16"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"/></symbol>
   <!-- Callout 图标（24×24 线性描边风格：统一线宽 3.5、圆头端点，颜色随 .callout__icon 的 color 变化） -->
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="4.25" r="1.75" fill="currentColor"/><line x1="12" y1="9.75" x2="12" y2="19.75" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></symbol>

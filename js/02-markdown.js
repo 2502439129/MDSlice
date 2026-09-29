@@ -487,9 +487,12 @@
             inner = '<button class="tree-toggle" type="button" aria-expanded="true"' +
                     ' aria-controls="' + gid + '" data-target="' + gid + '"' +
                     ' title="折叠 / 展开 ' + descendants(idx) + ' 个子字段">' +
-                    '<span class="chev">▼</span></button>';
-          } else if (m.level > 0) {
-            inner = '<span class="tree-mark">└</span>';
+                    '<svg class="chev" viewBox="0 0 1024 1024" width="10" height="10"' +
+                    ' aria-hidden="true" focusable="false"><use href="#i-caret"/></svg></button>';
+          } else if (hasTree) {
+            // 层级只靠缩进体现，不画 └；这里预留与折叠按钮同宽的空位，
+            // 使同一层级的文字左缘不受「这一行有没有子项」影响
+            inner = '<span class="tree-pad"></span>';
           }
           // 首列的装饰顺序：折叠 / 树形缩进 → 待办复选框 → 文案 → 子项计数
           if (m.done !== null) inner += taskBox(m.done);

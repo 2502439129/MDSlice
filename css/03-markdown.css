@@ -118,14 +118,18 @@ td.tree[data-level="1"]{padding-left:32px}
 td.tree[data-level="2"]{padding-left:52px}
 td.tree[data-level="3"]{padding-left:72px}
 td.tree[data-level="4"]{padding-left:92px}
-.tree-mark{color:var(--text-faint);margin-right:6px;font-size:13px;user-select:none}
+/* 叶子行在「折叠按钮」位置上的占位：宽度与 .tree-toggle 完全一致（17px + 5px 间距），
+   但不画任何符号——层级改由 td.tree 的 padding-left 体现 */
+.tree-pad{display:inline-block;width:17px;margin-right:5px}
 .tree-toggle{
   appearance:none;border:0;background:none;padding:0;margin-right:5px;
   width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;
-  cursor:pointer;color:var(--text-muted);border-radius:4px;vertical-align:-4px;
+  cursor:pointer;color:var(--text-muted);border-radius:4px;vertical-align:middle;
 }
 .tree-toggle:hover{background:var(--bg-inset);color:var(--accent)}
-.tree-toggle .chev{display:inline-block;font-size:10px;line-height:1;transition:transform .15s}
+/* 箭头用 SVG（精灵里的 #i-caret）：盒子尺寸固定，不受字体度量影响——此前是 ▼ 字形，
+   光学位置随字体漂移，实测按钮中心比文字中心低 6px */
+.tree-toggle .chev{display:block;width:10px;height:10px;transition:transform .15s}
 .tree-toggle[aria-expanded="false"] .chev{transform:rotate(-90deg)}
 .tree-toggle--leaf{width:17px;display:inline-block;cursor:default}
 .tree-count{
