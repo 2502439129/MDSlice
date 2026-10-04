@@ -344,11 +344,34 @@
     return hits.length === 1 ? hits[0].id : null;
   }
 
-  /** 切到片段对应的章节（供「打开文档后定位」与锚点链接共用）。 */
+  /** 片段 → 定位目标 `{ el, owner, sectionId }`：先在当前标签页的容器内按渲染出的 id 精确查找
+      （章节标题与 H4 / H5 等页内小节的 id 都在 DOM 上，所以页内小节一并覆盖），
+      没命中再退回章节 id 的四步降级匹配；都不中返回 null。
+      只匹配到章节时 el 为空（该章节在容器里没有同名元素）。 */
+  function resolveFragment(fragment) {
+    var cands = [fragment], dec = null;
+    try { dec = decodeURIComponent(fragment); } catch (e) { /* 非合法编码：按原样 */ }
+    if (dec !== null && dec !== fragment) cands.unshift(dec);
+
+    for (var i = 0; i < cands.length; i++) {
+      var el = findInActivePane(cands[i]);
+      var owner = el && el.closest ? el.closest('.section') : null;
+      if (owner) return { el: el, owner: owner, sectionId: owner.id.replace(/^sec-/, '') };
+    }
+
+    var id = findSectionId(fragment);
+    return id ? { el: null, owner: null, sectionId: id } : null;
+  }
+
+  /** 切到片段对应的章节（供「打开文档后定位」与锚点链接共用）；命中页内小节时再滚到该元素。 */
   function jumpToFragment(fragment) {
     if (!fragment) return;
-    var id = findSectionId(fragment);
-    if (id) showSection(id);
+    var hit = resolveFragment(fragment);
+    if (!hit) return;
+    showSection(hit.sectionId);
+    if (hit.el && hit.el !== hit.owner.firstElementChild) {  // 章节自己的标题：切章即回到页首
+      hit.el.scrollIntoView({ block: 'start' });
+    }
   }
 
   /** 可在应用内打开的文档后缀（与「打开 MD」的 accept 一致）。 */
@@ -465,26 +488,13 @@
     var href = link.getAttribute('href') || '';
 
     if (href.charAt(0) === '#') {                           // ① 页内锚点
-      var frag = href.slice(1);
-      var target = null;
-      try { target = findInActivePane(decodeURIComponent(frag)); }
-      catch (err) { target = findInActivePane(frag); }
+      var hit = resolveFragment(href.slice(1));
+      if (!hit) return;                                     // 认不出来：交回浏览器
+      if (hit.owner && hit.owner.classList.contains('active')) return;   // 本页内锚点：浏览器自己滚
 
-      if (target) {
-        var owner = target.closest ? target.closest('.section') : null;
-        if (owner && owner.classList.contains('active')) return;   // 本页内锚点：浏览器自己滚
-        if (owner) {                                              // 别的章节：先切章
-          e.preventDefault();
-          showSection(owner.id.replace(/^sec-/, ''));
-          target.scrollIntoView({ block: 'start' });
-          return;
-        }
-      }
-
-      var id = findSectionId(frag);
-      if (!id) return;
       e.preventDefault();
-      showSection(id);
+      showSection(hit.sectionId);                           // 别的章节 / 只匹配到章节：先切章
+      if (hit.el) hit.el.scrollIntoView({ block: 'start' });// 页内小节：再滚到它
       return;
     }
 
