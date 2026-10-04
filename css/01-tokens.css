@@ -16,6 +16,13 @@
   --c-danger:#cf222e; --c-danger-bg:#ffebe9;
   --c-note:#636c76; --c-note-bg:#f0f3f6;
   --c-success:#1a7f37; --c-success-bg:#dafbe1;
+  /* 任务完成态家族（勾选方框 / 「已完成」胶囊 / 100% 进度环三处统一）：配色都取自原型的完成色 ——
+     填充与环 = #10a37f、胶囊底 = #e9faf3、文字 = #0c7f60。
+     文字刻意比原型深一档（原型 #0d8f6c 在胶囊底上只有 3.76:1，不到 AA）：这是满足 4.5:1 的
+     最小压深量，色相与饱和度与原值一致（同一族青绿），实测胶囊底 4.60:1、表格底色 4.98:1。
+     刻意不复用 --c-success：成功色继续服务文档语义（徽章、Callout），两套互不干扰。
+     原型只给了浅色一套，暗色下填充沿用同值（与行底 5.5:1、白勾 3.2:1），文字与底色另配 */
+  --c-done:#10a37f; --c-done-text:#0c7f60; --c-done-bg:#e9faf3;
 
   --code-bg:#f6f8fa;
   --code-k:#cf222e; --code-s:#0a3069; --code-c:#6e7781; --code-n:#0550ae; --code-f:#8250df;
@@ -33,6 +40,8 @@
   --c-danger:#f85149; --c-danger-bg:#25171c;
   --c-note:#9198a1; --c-note-bg:#1c2128;
   --c-success:#3fb950; --c-success-bg:#0f2a17;
+  /* 完成态家族在暗色下只换文字与胶囊底：文字与胶囊底 6.5:1、与表格底色 8.2:1，均达 AA */
+  --c-done-text:#2bbfa0; --c-done-bg:#0c2b26;
   --code-bg:#161b22;
   --code-k:#ff7b72; --code-s:#a5d6ff; --code-c:#8b949e; --code-n:#79c0ff; --code-f:#d2a8ff;
 }

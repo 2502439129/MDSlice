@@ -105,9 +105,15 @@
 
   /* ---- 列表 ---- */
   /** 任务复选框标记：列表任务项与表格首列待办共用同一份内容，两处外观因此一致
-      （disabled 只表示不可交互，勾选状态由文档里的 `[ ]` / `[x]` 决定）。 */
+      （disabled 只表示不可交互，勾选状态由文档里的 `[ ]` / `[x]` 决定）。
+      结构照原型：外层容器定位、里面的不可交互 input 自己当方框、勾是紧邻的真 SVG 元素。
+      勾刻意不用背景图——背景图会被页面的 CSP（img-src）挡掉、打印时也会丢，
+      而 SVG 元素属于正常内容，两种情况都照常画出来。 */
   function taskBox(done) {
-    return '<input type="checkbox" disabled' + (done ? ' checked' : '') + '>';
+    return '<span class="task-cb"><input type="checkbox" disabled' + (done ? ' checked' : '') + '>' +
+           '<svg class="task-cb__ck" viewBox="0 0 10 10" aria-hidden="true">' +
+           '<path d="M1.8 5.2l2 2 4.4-4.6" fill="none" stroke="currentColor"' +
+           ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
   }
 
   /** 生成一个列表项：`[x]` / `[ ]` 开头视为任务项。 */
@@ -316,12 +322,18 @@
   }
 
   /* ---- 表格（└ 折叠树 / [[必填]] 徽章 / 逐列自动分类） ---- */
-  /** 列名 → 列语义：**逐列**命中，只作用于该列里「整格恰好是一个行内代码」的单元格。
-      未命中的列（如 `语法` / `备注`）一律走普通行内解析，不会被别的列牵连。 */
+  /** 列名 → 列语义：**逐列**命中，不牵连同一张表的其他列。
+      两类别名，触发条件不同：
+      - 结构类（必填 / 类型 / 示例值 / 默认值 / 字段 / 说明 / 参数 / 名称）叙述型表格易误伤，
+        因此只作用于「整格恰好是一个行内代码」的单元格；
+      - 取值类（状态 / 完成度）单元格取值本身就是封闭枚举，纯文本与行内代码两种写法都认，
+        取值不在枚举内时落回普通行内解析。
+      未命中的列（如 `语法` / `备注`）一律走普通行内解析。 */
   var COLUMN_SEMANTIC = {
     '必填': 'required', '类型': 'type',
     '示例值': 'example', '默认值': 'example',
-    '字段': 'code', '说明': 'code', '参数': 'code', '名称': 'code'
+    '字段': 'code', '说明': 'code', '参数': 'code', '名称': 'code',
+    '状态': 'status', '完成度': 'progress'
   };
 
   /** `example` 语义下「像字面量」的取值：数组、引号串、布尔、null、数字。 */
@@ -383,14 +395,21 @@
     });
   }
 
-  /** 单元格的基础呈现：整格恰好是一个行内代码、且该列有语义时按语义变样式
-      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽），其余情况一律走普通行内解析。 */
+  /** 单元格的基础呈现：命中列语义时按语义变样式
+      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽 / 状态胶囊 / 进度环），其余情况一律走普通行内解析。
+      结构类语义要求**整格恰好是一个行内代码**；取值类语义（状态 / 完成度）纯文本也认，
+      且取值不落在枚举内时同样落回普通行内解析。 */
   function cellHtml(raw, semantic) {
     var txt = raw === undefined || raw === null ? '' : String(raw);
     var codeOnly = txt.match(/^`([^`]+)`$/);
+    var value = codeOnly ? codeOnly[1] : txt;             // 纯文本：\| 已在 splitRow 还原
+
+    if (semantic === 'status') return statusCell(value.trim()) || inline(txt);
+    if (semantic === 'progress') return progressCell(value.trim()) || inline(txt);
+
     if (!semantic || !codeOnly) return inline(txt);
 
-    var v = codeOnly[1];                                 // 纯文本：\| 已在 splitRow 还原
+    var v = value;
     if (semantic === 'required') return requiredCell(v);
     if (semantic === 'type') return '<span class="type">' + esc(v) + '</span>';
 
@@ -410,6 +429,59 @@
     if (v === '必填') return '<span class="badge badge--required">必填</span>';
     if (v === '选填') return '<span class="badge badge--optional">选填</span>';
     return '<span class="invalid" title="必填列只接受 必填 / 选填">' + esc(text) + '</span>';
+  }
+
+  /** `状态` 列的取值枚举：三个取值各有配色与图标，其余取值不算命中，落回普通行内解析。
+      图标为 10×10 的小图形（勾 / 方块），`待开始` 用空圈，由 CSS 画。 */
+  var STATUS_CLASS = { '已完成': 'st--done', '进行中': 'st--doing', '待开始': 'st--todo' };
+  var STATUS_ICON = {
+    '已完成': '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.8 5.2l2 2 4.4-4.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    '进行中': '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="3" y="3" width="4" height="4" rx="1" fill="currentColor"/></svg>',
+    '待开始': ''
+  };
+
+  /** 状态胶囊：圆形图标 + 取值文字；取值不在枚举内返回空串，让调用方走普通行内解析。
+      文字单独包一层，供 CSS 做光学补偿（中文字形墨迹中心与行盒中心有零点几像素的差）。
+      只认映射表自己的字符串值：取值撞上原型键（`constructor` 一类）不算命中（同列画像的守卫），
+      于是能插进 HTML 的只有三个枚举键本身，不需要转义。 */
+  function statusCell(v) {
+    if (typeof STATUS_CLASS[v] !== 'string') return '';
+    return '<span class="st ' + STATUS_CLASS[v] + '"><i class="st__ic" aria-hidden="true">' +
+           STATUS_ICON[v] + '</i><span class="st__txt">' + v + '</span></span>';
+  }
+
+  /* 进度环的几何：viewBox 26×26、环心 (13,13)、半径 9.5。
+     dasharray 取整周长、dashoffset 按百分比留缺，两者都用 viewBox 单位，所以显示尺寸怎么缩放
+     都不影响弧长——周长的唯一出处是 RING_C（CSS 只管显示尺寸与配色）。 */
+  var RING_BOX = 26;
+  var RING_CTR = RING_BOX / 2;
+  var RING_R = 9.5;
+  var RING_C = 2 * Math.PI * RING_R;
+
+  /** 完成度：只认 `80%` 这种整数百分比（0~100）；`80` / `0.8` / 越界 / 文字一律返回空串，
+      让调用方走普通行内解析。0% 灰环、中间值强调色环、100% 完成色环并叠一个勾。
+      环里只有数字，取值不需要转义。 */
+  function progressCell(v) {
+    var m = v.match(/^(\d{1,3})%$/);
+    if (!m) return '';
+    var p = parseInt(m[1], 10);
+    if (p > 100) return '';
+
+    // 两个圈只有类名与 dash 不同，其余属性一致；分开直写容易改一处漏一处
+    var arc = function (cls, dash) {
+      return '<circle cx="' + RING_CTR + '" cy="' + RING_CTR + '" r="' + RING_R +
+             '" class="' + cls + '"' + dash + '/>';
+    };
+    var dash = ' stroke-dasharray="' + RING_C.toFixed(2) + '"' +
+               ' stroke-dashoffset="' + (RING_C * (1 - p / 100)).toFixed(2) + '"';
+    return '<span class="ring ring--' + (p >= 100 ? 'full' : (p > 0 ? 'mid' : 'zero')) + '">' +
+      '<svg class="ring__dial" viewBox="0 0 ' + RING_BOX + ' ' + RING_BOX + '" aria-hidden="true">' +
+        arc('ring__bg', '') + arc('ring__fg', dash) +
+      '</svg>' +
+      '<svg class="ring__tick" viewBox="0 0 10 10" aria-hidden="true">' +
+        '<path d="M1.8 5.2l2 2 4.4-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>' +
+      '<span class="ring__val">' + p + '%</span></span>';
   }
 
   /** 渲染表格：首列用树形前缀表达层级，带子项的父行可单独折叠（工具条可全折 / 全展）；

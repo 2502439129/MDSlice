@@ -112,12 +112,62 @@ td .ex{font-family:var(--font-mono);font-size:12.5px;color:var(--c-warn);word-br
 /* 取值不在该列允许范围内的单元格（如 `必填` 列写成「否」）：标红示警，悬停给出正确取值 */
 td .invalid{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--c-danger);word-break:break-all}
 
+/* 取值类列（状态 / 完成度）：单元格取值命中枚举时渲染成胶囊 / 进度环。
+   两者都是行内弹性盒，窄屏卡片模式下作为「列名 / 内容」那一行的内容同样成立。
+   这里的 vertical-align:middle 不是可有可无：行内弹性盒的基线取自第一个子项，而两个盒子的
+   第一个子项都是没有文字的图形，基线便落到底边，按基线对齐会在下方多出一段行距
+   ——实测把表格行高从 45.5px 撑到 52.5px。
+   图标、间距、勾都按 em 写（基准 11.5px，取值与 px 等价）：改字号时整枚徽章一起缩放，
+   不会出现"文字变大了、标记还是原来那么大"。
+   注：Chrome 的「最小字号」把文字撑大时 em 不跟着变（实测该设置下 em 仍按声明值 11.5px 解析，
+   图标停在 12px、文字墨迹涨到 12.3px），这种情形 CSS 侧管不了 */
+.st{display:inline-flex;align-items:center;vertical-align:middle;gap:.435em;padding:1px 9px 1px 7px;
+  border-radius:20px;font-size:11.5px;font-weight:600;line-height:1.75;white-space:nowrap}
+.st__ic{width:1.043em;height:1.043em;flex:none;display:grid;place-items:center;border-radius:50%}
+.st__ic svg{display:block;width:.696em;height:.696em}
+/* 文字上移 0.043em（11.5px 下约 0.5px）做光学补偿：胶囊内容按行盒居中，而中文字形的墨迹中心
+   并不落在行盒中心，且随字体度量浮动（实测微软雅黑 UI 下几乎重合、Noto Sans SC 下文字偏低
+   0.56px、Segoe UI 下偏高 0.44px），放大后看得出"文字偏低"。
+   补在文字而不是图标上：图标继续居中于胶囊，不会让图标与文字整体下坠 */
+.st__txt{transform:translateY(-.043em)}
+.st--done{color:var(--c-done-text);background:var(--c-done-bg)}
+.st--done .st__ic{background:var(--c-done);color:#fff}
+.st--doing{color:var(--accent);background:var(--accent-soft)}
+.st--doing .st__ic{background:var(--accent);color:#fff}
+.st--todo{color:var(--text-faint);background:var(--bg-inset)}
+/* 待开始：空圈（描边圆点），与已完成（实心 + 勾）、进行中（实心 + 方块）区分 */
+.st--todo .st__ic{background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--border-strong)}
+
+/* 进度环：弧长由解析阶段写死的 dasharray / dashoffset 决定（见 02-markdown.js 的 progressCell），
+   这里只管显示尺寸与配色——环粗细按 viewBox 单位 3 折算 */
+.ring{position:relative;display:inline-flex;align-items:center;vertical-align:middle;gap:7px;white-space:nowrap}
+.ring__dial{display:block;width:22px;height:22px;flex:none;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:3;stroke-linecap:round}
+.ring__bg{stroke:var(--border)}
+/* 中间值（ring--mid）没有单独规则：上面这两条就是它的配色，只有两端需要覆盖，别误以为是漏了 */
+.ring__fg{stroke:var(--accent)}
+.ring__val{font-family:var(--font-mono);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;
+  min-width:34px;color:var(--accent)}
+/* 0%：环与数字都退回灰阶，表示「还没开始」 */
+.ring--zero .ring__fg{stroke:var(--border-strong)}
+.ring--zero .ring__val{color:var(--text-faint)}
+/* 100%：转成完成色（与勾选方框、「已完成」胶囊同一族），并在环心叠一个勾 */
+.ring--full .ring__fg{stroke:var(--c-done)}
+.ring--full .ring__val{color:var(--c-done-text)}
+/* 勾叠在环心上：left 取环宽的一半（22px / 2），与 .ring__dial 的尺寸联动 */
+.ring__tick{position:absolute;left:11px;top:50%;width:11px;height:11px;transform:translate(-50%,-50%);
+  color:var(--c-done);opacity:0}
+.ring--full .ring__tick{opacity:1}
+
 /* 可折叠树形首列 */
+/* 缩进步长取「折叠槽」的宽度 22px（按钮 17px + 间距 5px），于是每层恰好缩进到上一层的
+   文字左缘（14 + 22n），子级的折叠按钮正落在父级文字起点上。
+   此前步长 20px 与槽宽不等，每深一层就偏 2px（三层累计 6px），缩放关系对不上 */
 td.tree{white-space:nowrap}
-td.tree[data-level="1"]{padding-left:32px}
-td.tree[data-level="2"]{padding-left:52px}
-td.tree[data-level="3"]{padding-left:72px}
-td.tree[data-level="4"]{padding-left:92px}
+td.tree[data-level="1"]{padding-left:36px}
+td.tree[data-level="2"]{padding-left:58px}
+td.tree[data-level="3"]{padding-left:80px}
+td.tree[data-level="4"]{padding-left:102px}
 /* 叶子行在「折叠按钮」位置上的占位：宽度与 .tree-toggle 完全一致（17px + 5px 间距），
    但不画任何符号——层级改由 td.tree 的 padding-left 体现 */
 .tree-pad{display:inline-block;width:17px;margin-right:5px}
@@ -136,9 +186,45 @@ td.tree[data-level="4"]{padding-left:92px}
   margin-left:7px;font-size:11px;font-weight:600;font-family:var(--font-mono);
   color:var(--text-faint);background:var(--bg-inset);border-radius:10px;padding:0 6px;
 }
-/* 首列待办前缀（`[ ]` / `[x]`）：与列表任务项共用同一个复选框标记，这里只补行内对齐；
-   它排在树形缩进之后，因此层级越深越靠右 */
-td.tree > input[type="checkbox"]{margin:0 6px 0 0;vertical-align:middle;accent-color:var(--accent)}
+/* 待办复选框：列表任务项与表格首列待办共用同一份外观，所以标记结构相同（见 02-markdown.js
+   的 taskBox），这里一套规则管两处，分节的两条规则只负责各自的摆放。
+   结构照原型：.task-cb 容器定位 → 里面的 input 自己当方框 → 紧邻的 .task-cb__ck 是勾。
+   尺寸与配色对齐原型：18px 方框、5px 圆角、1.5px 浅描边；勾选态是成功色实心 + 白勾。
+   勾用真 SVG 元素而不是背景图：背景图会被页面 CSP 的 img-src 挡掉（实测整块勾消失，
+   只剩一个空的绿方框），打印时也会丢；原型里的 indeterminate（半选）态不实现——
+   本项目不做勾选联动与完成度汇总，产生不了半选 */
+.task-cb{--ck:18px;--ck-r:5px;position:relative;display:inline-block;flex:none;
+  width:var(--ck);height:var(--ck);vertical-align:middle}
+.task-cb > input[type="checkbox"]{
+  appearance:none;-webkit-appearance:none;position:absolute;inset:0;
+  width:100%;height:100%;margin:0;border-radius:var(--ck-r);
+  background-color:var(--bg);box-shadow:inset 0 0 0 1.5px var(--border);
+}
+.task-cb > input[type="checkbox"]:checked{
+  background-color:var(--c-done);box-shadow:inset 0 0 0 1.5px var(--c-done);
+}
+/* 勾占方框 61%：18px 框配 11px 勾，与原型同比例；压在方框之上（DOM 在后） */
+.task-cb__ck{position:absolute;left:50%;top:50%;width:61%;height:61%;
+  transform:translate(-50%,-50%);color:#fff;opacity:0;pointer-events:none}
+.task-cb > input[type="checkbox"]:checked + .task-cb__ck{opacity:1}
+/* 悬停时描边转深（原型挂在方框自身的 :hover 上；这里的 input 是 disabled，
+   指针事件在部分浏览器收不到，因此改挂容器：悬停行 / 悬停列表项时对未勾选的方框加深） */
+tbody tr:hover td.tree > .task-cb > input[type="checkbox"]:not(:checked),
+.tasklist > li.task:hover > .task-cb > input[type="checkbox"]:not(:checked){
+  box-shadow:inset 0 0 0 1.5px var(--border-strong);
+}
+/* 方框的填充是背景色，打印时默认不输出（勾是 SVG，不受影响），因此强制输出底色 */
+@media print{
+  .task-cb > input[type="checkbox"]{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+}
+/* 三层及以上：方框收一档（18 → 16px，圆角 5 → 4px），越深的行越轻；右侧间距同步补到 6px，
+   使文字仍落在「每层 22px」的缩进网格上（18+4 与 16+6 都等于 22） */
+td.tree[data-level="3"] > .task-cb,
+td.tree[data-level="4"] > .task-cb{--ck:16px;--ck-r:4px;margin-right:6px}
+
+/* 首列待办前缀（`[ ]` / `[x]`）：图标排在树形缩进之后，因此层级越深越靠右。
+   右间距 4px 与 18px 方框凑成 22px（一个缩进槽），文字因此落在缩进网格上 */
+td.tree > .task-cb{margin:0 4px 0 0}
 /* 首列是待办列时把首列收窄到内容宽度，并补一条右侧分隔线，
    免得收窄后待办项与右侧列之间看不出分界。
    只在桌面表格布局下生效——卡片模式（≤820px）里单元格已改为块级，宽度要铺满整行 */
@@ -188,6 +274,6 @@ details[open] summary{margin-bottom:10px}
 ul.tasklist > li:not(.task){list-style:disc}
 ol.tasklist > li:not(.task){list-style:decimal}
 .tasklist > li.task{list-style:none;position:relative;margin-bottom:6px}
-.tasklist > li.task > input[type="checkbox"]{
-  /* 纵向按正文行高（28px）与复选框高度（13px）居中在首行里 */
-  position:absolute;left:0;top:calc((28px - 13px) / 2);margin:0;accent-color:var(--accent)}
+.tasklist > li.task > .task-cb{
+  /* 纵向按正文行高（28px）与方框边长（--ck，见「表格首列」处的共用外观）居中在首行里 */
+  position:absolute;left:0;top:calc((28px - var(--ck)) / 2);margin:0}
