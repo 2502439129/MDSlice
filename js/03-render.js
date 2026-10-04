@@ -322,27 +322,32 @@
     root.style.scrollBehavior = prev;
   }
 
-  /* ---- 正文链接：页内锚点 / 文档间链接 ---- */
-  /** 片段 → 章节 id：依次尝试原样、slug 化、去短横线、唯一前缀匹配；都不中返回 null。 */
-  function findSectionId(fragment) {
+  /* ---- 正文链接：页内锚点 / 文档间链接 / 悬浮预览（预览见 js/09-preview.js）---- */
+  /** 片段 → 章节 id：在给定的章节条目（只用得到 id）里依次尝试原样、slug 化、去短横线、
+      唯一前缀匹配；都不中返回 null。同一条规则服务三处 —— 页内锚点、打开文档后的定位、
+      悬浮预览里对目标文件的定位：预览手上只有解析结果、还没有 DOM，所以查找得能接受任意一份章节表。 */
+  function findSectionIdIn(list, fragment) {
     var raw = fragment;
     try { raw = decodeURIComponent(fragment); } catch (e) { /* 非合法编码时按原样 */ }
     raw = raw.trim();
     if (!raw) return null;
 
     var i;
-    for (i = 0; i < sections.length; i++) if (sections[i].id === raw) return sections[i].id;
+    for (i = 0; i < list.length; i++) if (list[i].id === raw) return list[i].id;
 
     var dashed = slug(raw);
     var compact = dashed.replace(/-/g, '');
-    for (i = 0; i < sections.length; i++) if (sections[i].id === dashed) return sections[i].id;
-    for (i = 0; i < sections.length; i++) if (sections[i].id.replace(/-/g, '') === compact) return sections[i].id;
+    for (i = 0; i < list.length; i++) if (list[i].id === dashed) return list[i].id;
+    for (i = 0; i < list.length; i++) if (list[i].id.replace(/-/g, '') === compact) return list[i].id;
 
-    var hits = sections.filter(function (s) {                 // 兜底：唯一的前缀命中
+    var hits = list.filter(function (s) {                    // 兜底：唯一的前缀命中
       return s.id.replace(/-/g, '').indexOf(compact) === 0;
     });
     return hits.length === 1 ? hits[0].id : null;
   }
+
+  /** 片段 → 当前标签页的章节 id（见 findSectionIdIn）。 */
+  function findSectionId(fragment) { return findSectionIdIn(sections, fragment); }
 
   /** 片段 → 定位目标 `{ el, owner, sectionId }`：先在当前标签页的容器内按渲染出的 id 精确查找
       （章节标题与 H4 / H5 等页内小节的 id 都在 DOM 上，所以页内小节一并覆盖），

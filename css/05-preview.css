@@ -1,0 +1,72 @@
+/* preview.css —— 正文链接的悬浮预览浮层（逻辑见 js/09-preview.js）。
+   浮层挂在 body 下、在 #content 之外：文档里那套以 main 为前缀的排版不会跟过来，
+   所以这里自带一层紧凑排版；其余组件样式（表格、代码块、Callout、徽章、折叠块）都是全局的，
+   浮层内直接复用，不必重复定义。
+   浮层里的内容与主文档同源渲染，但已经把 id 与标题锚点去掉（见 09-preview.js 的 pvClean）。 */
+
+.preview{
+  position:fixed;z-index:70;                 /* 顶栏 60 之下要让位给轻提示 80：浮层取中间 */
+  display:none;flex-direction:column;overflow:hidden;
+  width:min(460px,calc(100vw - 24px));
+  max-height:min(360px,calc(100vh - 24px));
+  border:1px solid var(--border-strong);border-radius:var(--radius);
+  background:var(--bg);box-shadow:0 12px 32px rgba(0,0,0,.18);
+  color:var(--text);font-size:13.5px;line-height:1.6;
+}
+.preview.is-on{display:flex;animation:fade .12s ease}
+
+/* 头部：文件名 + 章节名 + 单元类型（H4 小节 / H2 章节 / 整篇目录）。
+   只有这一条可点（点开该文件），所以手型只给它 */
+.preview__head{display:flex;align-items:baseline;gap:8px;flex:none;cursor:pointer;
+  padding:9px 14px;border-bottom:1px solid var(--border);background:var(--bg-subtle);font-size:12.5px}
+.preview__head:hover{background:var(--bg-inset)}
+.preview__file{flex:none;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--font-mono);color:var(--text-muted)}
+.preview__title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650}
+/* 单元类型用 --text-muted 而非 --text-faint：11px 的标记在头部底色上要达 AA，
+   faint 在浅色下只有 2.85:1、深色 3.77:1，muted 是 5.01 / 5.94（实测值见提交前审查记录） */
+.preview__kind{flex:none;color:var(--text-muted);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+
+/* 正文：内容区自己滚动（页面滚动仍然会收起浮层，两者互不干扰）；
+   overscroll-behavior 让滚到尽头时不要把页面带着一起滚。
+   上下边缘的渐隐按滚动位置切换：下面还有内容 / 已经滚上去了，各压一层
+   （不再有文字提示 —— 边缘渐隐本身就说明了还有内容） */
+.preview__body{--pv-mask:none;position:relative;flex:1;min-height:0;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;
+  padding:12px 14px;
+  -webkit-mask-image:var(--pv-mask);mask-image:var(--pv-mask)}
+.preview.is-more .preview__body{--pv-mask:linear-gradient(#000 calc(100% - 26px),transparent)}
+.preview.is-scrolled .preview__body{--pv-mask:linear-gradient(transparent,#000 26px)}
+.preview.is-more.is-scrolled .preview__body{
+  --pv-mask:linear-gradient(transparent,#000 26px,#000 calc(100% - 26px),transparent)}
+
+/* 紧凑排版：正文那套字号与边距是按版心（920px）设计的，搬到 460px 的浮层里会过大 */
+.preview__body > :first-child{margin-top:0}
+.preview__body > :last-child{margin-bottom:0}
+.preview__body h1,.preview__body h2,.preview__body h3,
+.preview__body h4,.preview__body h5,.preview__body h6{margin:14px 0 6px;line-height:1.35;font-weight:650}
+.preview__body h1{font-size:19px}
+.preview__body h2{font-size:16.5px}
+.preview__body h3{font-size:15px}
+.preview__body h4{font-size:14px}
+.preview__body h5{font-size:13.5px}
+.preview__body h6{font-size:13px;color:var(--text-muted)}
+.preview__body p{margin:0 0 10px}
+.preview__body ul,.preview__body ol{margin:0 0 10px;padding-left:20px}
+.preview__body li{margin-bottom:4px}
+.preview__body img{max-width:100%;height:auto;border-radius:6px}
+.preview__body del{color:var(--text-muted)}
+.preview__body mark{background:var(--c-warn-bg);padding:0 2px;border-radius:3px}
+/* 多列与元数据卡：在窄浮层里并排会挤成一团，改成单列 */
+.preview__body .meta-card,.preview__body .duo{grid-template-columns:1fr}
+.preview__body .callout,.preview__body .tabs,.preview__body details{margin:10px 0}
+.preview__body .table-wrap,.preview__body .codeblock{margin-bottom:10px}
+.preview__body pre{font-size:12px;padding:10px 12px}
+
+/* 摘要：章节名列表，按层级缩进 */
+.preview__outline{padding:2px 0}
+.preview__row{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 0;color:var(--text-muted)}
+.preview__row.lv1{color:var(--text);font-weight:650}
+.preview__row.lv2{padding-left:14px}
+.preview__row.lv3{padding-left:28px}
+.preview__empty{margin:0;color:var(--text-faint)}

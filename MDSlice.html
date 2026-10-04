@@ -7,11 +7,12 @@
 <!-- 代码高亮主题：两套按 prefers-color-scheme 互斥，手动切换主题时会改写 media（见 js/05-shell.js） -->
 <link rel="stylesheet" id="hljs-theme-light" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" id="hljs-theme-dark" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-<!-- 样式按职责拆分，顺序即优先级：令牌 → 骨架 → 文档内容 → 首页 -->
+<!-- 样式按职责拆分，顺序即优先级：令牌 → 骨架 → 文档内容 → 首页 → 悬浮预览 -->
 <link rel="stylesheet" href="css/01-tokens.css">
 <link rel="stylesheet" href="css/02-layout.css">
 <link rel="stylesheet" href="css/03-markdown.css">
 <link rel="stylesheet" href="css/04-home.css">
+<link rel="stylesheet" href="css/05-preview.css">
 </head>
 <body>
 
@@ -87,6 +88,7 @@ window.MathJax = {
 <script src="js/06-dirs.js"></script>
 <script src="js/07-home.js"></script>
 <script src="js/08-boot.js"></script>
+<script src="js/09-preview.js"></script>
 
 </body>
 </html>
