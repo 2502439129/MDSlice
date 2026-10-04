@@ -2,7 +2,7 @@
 
 ---
 title: MD 结构说明
-version: V1.0.0
+version: V1.4.0
 updated: 2026-10-04
 scope: 章节切分 / 锚点 / 表格 / 容器 / 缩进的实现规则
 ---
