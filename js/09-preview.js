@@ -85,8 +85,23 @@
     });
   }
 
+  /** 章节块的作用范围终点（不含）：章节表是前序排列的，紧随其后的**级别更深**的连续块就是它的后代
+      —— 与 buildTree 按级别回溯认父的结果一致（见 03-render.js），所以「本节 + 这段」正好等于
+      正文里点这一章会亮起的那些块（showSection 连后代一起激活）。
+      只用于章节；页内小节的终点另有 pvSubEnd（H4 起不再切章，规则不同）。 */
+  function pvBlockEnd(sections, at) {
+    var lv = sections[at].level, j = at + 1;
+    while (j < sections.length && sections[j].level > lv) j++;
+    return j;
+  }
+
   /** 片段 → 预览单元：先按章节 id 匹配（与打开文件后的定位同一套四级降级），
-      不中再按页内小节的 id 匹配。命中页内小节时只预览该小节（到下一个同级标题为止）。 */
+      不中再按页内小节的 id 匹配。sec 始终是所属章节（小节单元要用它的 lines），
+      blocks 只有章节单元才有。两种单元的内容范围不同：
+      - 命中页内小节（sub 非空）：只预览该小节，到下一个同级或更高级标题为止；
+      - 命中章节（sub 为 null）：预览 blocks = 该章节**连同全部后代章节块** —— 与正文里点这一章
+        看到的范围一致。只渲染本节是不够的：内容全写在子标题里的章节（H1 全由 H2 组成、
+        H2 全由 H3 组成）会预览出一个「只有标题、正文区空空」的盒子。 */
   function pvUnitOf(idx, fragment) {
     if (!fragment) return null;
     var i;
@@ -95,6 +110,7 @@
       for (i = 0; i < idx.sections.length; i++) {
         if (idx.sections[i].id === secId) {
           return { sec: idx.sections[i], sub: null,
+                   blocks: idx.sections.slice(i, pvBlockEnd(idx.sections, i)),
                    title: idx.sections[i].title, level: idx.sections[i].level };
         }
       }
@@ -108,8 +124,10 @@
     return { sec: sec, sub: sub, title: sub.title, level: sub.level };
   }
 
-  /** 预览单元 → HTML：整章走 renderSection，页内小节用它的行区间走 parseBlocks；
-      两边都在临时 id 作用域里渲染，产物最后统一去掉 id 与标题锚点。 */
+  /** 预览单元 → HTML：章节按 blocks 逐个 renderSection（本节 + 全部后代块，与正文同样的块序列），
+      页内小节用它的行区间走 parseBlocks；两边都在临时 id 作用域里渲染，产物最后统一去掉 id 与标题锚点。
+      blocks 里的每个块都会走一遍 renderSection，于是产出的 id 更多——临时作用域与 pvClean
+      这两道隔离在这里更要紧（见文件头两条要点）。 */
   function pvRender(unit) {
     var savedIds = usedIds, savedUid = uid;
     usedIds = Object.create(null);
@@ -119,7 +137,7 @@
         var end = pvSubEnd(unit.sec.lines, unit.sub.start, unit.sub.level);
         html = parseBlocks(unit.sec.lines.slice(unit.sub.start, end), true);
       } else {
-        html = renderSection(unit.sec, false);
+        html = unit.blocks.map(function (sec) { return renderSection(sec, false); }).join('');
       }
     } finally {
       usedIds = savedIds;
