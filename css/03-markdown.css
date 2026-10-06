@@ -159,6 +159,33 @@ td .invalid{font-family:var(--font-mono);font-size:13px;font-weight:600;color:va
   color:var(--c-done);opacity:0}
 .ring--full .ring__tick{opacity:1}
 
+/* 进度列：分数 + 进度条。条宽由解析阶段写进行内 style，是文档里写死的离散计数（`3/5`），
+   与「完成度」环的百分比各走各的 —— 本项目不做汇总，父行的分数不会因子项而变。
+   三档配色与状态胶囊、进度环共用令牌：0 灰 / 部分强调色 / 满格完成色。
+   条是块级弹性盒（原型同款）：td 给多宽就吃掉多宽——轨道本身没有内容，宽度只能靠 flex:1 挣，
+   不写它就只剩 min-width 那 36px；min-width 则是给窄列兜底，免得条被压没。
+   max-width 160px 是给「宽表」踩的刹车：本项目表格 width:100% 且自动列宽，不设上限时条会把
+   整列的剩余空间全吃掉（实测两列表里长到 578px，已经不像进度条而像一条横线），
+   封顶后多出来的宽度让给同表其它列。数值等宽 + min-width 34px 与 .ring__val 同宽，
+   换数（1/9 → 10/12）时列宽不抖。
+   注：`pbar--mid` 没有单独规则（基态就是它），只有两端需要覆盖，别误以为是漏了 */
+.pbar{display:flex;align-items:center;gap:9px}
+.pbar__val{display:inline-flex;align-items:baseline;font-family:var(--font-mono);font-size:12px;
+  font-weight:600;font-variant-numeric:tabular-nums;min-width:34px;color:var(--text-muted)}
+/* 斜杠弱化：只压重量不压字号，等宽字下仍占一个字符宽，分数左右不位移 */
+.pbar__slash{color:var(--text-faint)}
+.pbar__track{flex:1;min-width:36px;max-width:160px;height:6px;border-radius:3px;background:var(--border);overflow:hidden}
+.pbar__fill{display:block;height:100%;border-radius:3px;background:var(--accent)}
+/* 0/5：分数退回灰阶（条宽为 0，本来也不着色）；满格：转完成色，与勾选方框、100% 环同一族 */
+.pbar--zero .pbar__val{color:var(--text-faint)}
+.pbar--full .pbar__val{color:var(--c-done-text)}
+.pbar--full .pbar__fill{background:var(--c-done)}
+/* 轨道与填充都是背景色，打印时默认不输出（分数还在、整条进度条却消失），
+   因此与待办复选框同样强制输出底色（进度环不受影响：它用 stroke 画） */
+@media print{
+  .pbar__track,.pbar__fill{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+}
+
 /* 可折叠树形首列 */
 /* 缩进步长取「折叠槽」的宽度 22px（按钮 17px + 间距 5px），于是每层恰好缩进到上一层的
    文字左缘（14 + 22n），子级的折叠按钮正落在父级文字起点上。

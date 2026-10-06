@@ -326,14 +326,14 @@
       两类别名，触发条件不同：
       - 结构类（必填 / 类型 / 示例值 / 默认值 / 字段 / 说明 / 参数 / 名称）叙述型表格易误伤，
         因此只作用于「整格恰好是一个行内代码」的单元格；
-      - 取值类（状态 / 完成度）单元格取值本身就是封闭枚举，纯文本与行内代码两种写法都认，
+      - 取值类（状态 / 完成度 / 进度）单元格取值本身就是封闭枚举，纯文本与行内代码两种写法都认，
         取值不在枚举内时落回普通行内解析。
       未命中的列（如 `语法` / `备注`）一律走普通行内解析。 */
   var COLUMN_SEMANTIC = {
     '必填': 'required', '类型': 'type',
     '示例值': 'example', '默认值': 'example',
     '字段': 'code', '说明': 'code', '参数': 'code', '名称': 'code',
-    '状态': 'status', '完成度': 'progress'
+    '状态': 'status', '完成度': 'progress', '进度': 'bar'
   };
 
   /** `example` 语义下「像字面量」的取值：数组、引号串、布尔、null、数字。 */
@@ -396,8 +396,8 @@
   }
 
   /** 单元格的基础呈现：命中列语义时按语义变样式
-      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽 / 状态胶囊 / 进度环），其余情况一律走普通行内解析。
-      结构类语义要求**整格恰好是一个行内代码**；取值类语义（状态 / 完成度）纯文本也认，
+      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽 / 状态胶囊 / 完成度环 / 进度条），其余情况一律走普通行内解析。
+      结构类语义要求**整格恰好是一个行内代码**；取值类语义（状态 / 完成度 / 进度）纯文本也认，
       且取值不落在枚举内时同样落回普通行内解析。 */
   function cellHtml(raw, semantic) {
     var txt = raw === undefined || raw === null ? '' : String(raw);
@@ -406,6 +406,7 @@
 
     if (semantic === 'status') return statusCell(value.trim()) || inline(txt);
     if (semantic === 'progress') return progressCell(value.trim()) || inline(txt);
+    if (semantic === 'bar') return barCell(value.trim()) || inline(txt);
 
     if (!semantic || !codeOnly) return inline(txt);
 
@@ -482,6 +483,28 @@
         '<path d="M1.8 5.2l2 2 4.4-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>' +
       '<span class="ring__val">' + p + '%</span></span>';
+  }
+
+  /** 进度：只认 `3/5` 这种分数——分子分母都是数字、分母不为 0、分子不超过分母；
+      `3 / 5`（带空格）/ `3/` / `3/0` / `6/5` / 文字一律返回空串，让调用方走普通行内解析。
+      条宽 = 分子 / 分母，是**文档里写死的离散计数**：本项目不做汇总，父行写 `2/3` 就一直是 2/3，
+      不会因子项被勾选而变（与「完成度」列的百分比各写各的，互不换算）。
+      两处数字都来自 \d+，取值不需要转义。 */
+  function barCell(v) {
+    var m = v.match(/^(\d+)\/(\d+)$/);
+    if (!m) return '';
+    var n = parseInt(m[1], 10);
+    var total = parseInt(m[2], 10);
+    if (!total || n > total) return '';
+
+    // 精确到千分之一，免得 1/3 写成 33.333333333333336 这样一长串
+    var pct = Math.round(n / total * 100000) / 1000;
+    return '<span class="pbar pbar--' + (n >= total ? 'full' : (n > 0 ? 'mid' : 'zero')) +
+        '" title="已完成 ' + n + ' 项，共 ' + total + ' 项">' +
+      '<span class="pbar__val">' + n + '<span class="pbar__slash">/</span>' + total + '</span>' +
+      '<span class="pbar__track" aria-hidden="true">' +
+        '<i class="pbar__fill" style="width:' + pct + '%"></i>' +
+      '</span></span>';
   }
 
   /** 渲染表格：首列用树形前缀表达层级，带子项的父行可单独折叠（工具条可全折 / 全展）；
