@@ -51,6 +51,22 @@
 .preview__body h4{font-size:14px}
 .preview__body h5{font-size:13.5px}
 .preview__body h6{font-size:13px;color:var(--text-muted)}
+/* 层级标记（H1…H6）：正文那一套由 03-markdown.css 的 main h*::before 提供，浮层挂在 body 下拿不到 ——
+   预览会连续摆出「本章 + 后代章节块」，没有这枚标记就只能靠 16.5px 与 15px 这点字号差认层级。
+   字号比正文小一档（正文 11px / 正文基准 16px，这里 10px / 浮层基准 13.5px）。
+   配色用 --text-muted，不是正文那枚的 --text-faint：理由同上面 .preview__kind —— 小字号标记要在
+   浮层底色上达 AA。实测（底色取 --bg）：亮色 muted 5.33:1 / faint 3.04:1，暗色 muted 6.5:1 /
+   faint 4.12:1 —— 两套里 faint 都不达标，所以取 muted */
+.preview__body h1::before,.preview__body h2::before,.preview__body h3::before,
+.preview__body h4::before,.preview__body h5::before,.preview__body h6::before{
+  font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.02em;
+  color:var(--text-muted);margin-right:6px;vertical-align:1px}
+.preview__body h1::before{content:"H1"}
+.preview__body h2::before{content:"H2"}
+.preview__body h3::before{content:"H3"}
+.preview__body h4::before{content:"H4"}
+.preview__body h5::before{content:"H5"}
+.preview__body h6::before{content:"H6"}
 .preview__body p{margin:0 0 10px}
 .preview__body ul,.preview__body ol{margin:0 0 10px;padding-left:20px}
 .preview__body li{margin-bottom:4px}
