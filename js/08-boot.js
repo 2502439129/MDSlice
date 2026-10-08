@@ -9,11 +9,16 @@
   if (location.protocol === 'file:') {
     homeNotice = FILE_PROTOCOL_NOTICE;                               // 浏览器拦截本地读取：给出说明与「添加目录」入口
   } else {
-    var autoDir = { name: autoDirName(), source: 'server', children: [], expanded: true,
-                    url: new URL('./', location.href).href };
+    /* 本地服务（bin/mdslice.js）会把阅读器挂在 /__mdslice/、内容根挂在 /，两者不是同一个地址，
+       所以它注入 window.MDSLICE 说明「目录名 + 内容根地址」；没有这份配置时（普通静态服务器）
+       照旧按页面地址推断，file:// 直开与静态服务的用法不受影响。 */
+    var bootCfg = window.MDSLICE || {};
+    var autoDir = { name: bootCfg.name || autoDirName(), source: 'server', children: [], expanded: true,
+                    url: bootCfg.url || new URL('./', location.href).href };
     ensureNodeId(autoDir);
     homeDirs.push(autoDir);
     loadServerDir(autoDir);                              // 列出结果异步填进首页
   }
+
 
   activateTab(home.id);
