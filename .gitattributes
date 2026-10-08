@@ -1,0 +1,30 @@
+# 行尾约定：此前只存在于工作区（js/ 是 LF，其余文本是 CRLF），这里显式钉住。
+#
+# 为什么需要它：core.autocrlf 是每台机器的本地设置，决定不了"这个仓库该用哪种行尾"，
+# 于是不同平台/不同设置下 checkout 出来的字节会不一样（git 也会对改过的 LF 文件提示
+# 「LF will be replaced by CRLF」）。钉住之后与本地 autocrlf 取值无关，克隆出来的字节
+# 与仓库既有文件一致，回补的 release 包也不会因为机器不同而变样。
+#
+# 三处别随手改：
+# - js/ 与 bin/ 用 LF：bin/mdslice.js 首行是 shebang，CRLF 会让 Unix 下的
+#   `#!/usr/bin/env node` 失效（`env: node\r: No such file or directory`）。
+# - *.md 用 CRLF：release/pack.ps1 里核对版本号的正则依赖文档是 CRLF（见脚本内注释）。
+# - 图片显式声明 binary：免得内容启发式判断失误，把二进制当文本改行尾。
+* text=auto
+
+js/**         text eol=lf
+bin/**        text eol=lf
+.gitattributes text eol=lf
+
+*.css         text eol=crlf
+*.html        text eol=crlf
+*.md          text eol=crlf
+*.json        text eol=crlf
+.gitignore    text eol=crlf
+
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.webp        binary
+*.ico         binary
