@@ -1,14 +1,13 @@
 /* dirs.js —— 目录来源与文件树数据：本地文件夹（优先目录句柄，退回 webkitdirectory）、拖入的文件夹、
-   静态服务器目录索引（懒加载 + 空目录剪枝）。只收子文件夹与 markdown，跳过常见构建/缓存目录。
+   静态服务器目录索引（懒加载 + 空目录剪枝）。只收子文件夹与 markdown；哪些目录跳过、深度多少、
+   要不要剪枝空目录都由 js/00-config.js 的配置决定（见 treeHideDir / treeIsAllowed / treeMaxDepth /
+   treePruneEmpty），这里的每一条路径都问它，规则不留第二份。
    本文件属于 MDSlice 的拆分模块，加载顺序见 MDSlice.html（共享全局作用域，无需打包）。 */
 'use strict';
 
   /* ---- 首页目录区的数据模型 ---- */
-  var MAX_DEPTH = 8;                                    // 目录递归深度上限
-  var IGNORE_DIRS = {
-    node_modules: 1, bower_components: 1, vendor: 1, dist: 1, build: 1, out: 1, target: 1,
-    coverage: 1, __pycache__: 1
-  };
+  /* 忽略名单、白名单、递归深度、是否剪枝空目录都是配置项，唯一出处是 js/00-config.js
+     （问 treeHideDir / treeIsAllowed / treeMaxDepth / treePruneEmpty），这里不留第二份名单。 */
   var homeDirs = [];                    // 首页「目录」区，数组顺序即展示顺序
   var homeNodes = Object.create(null);  // 节点 id → 节点，供事件委托反查
   var homeSeq = 0;
@@ -41,8 +40,6 @@
   }
   /** 过滤时给命中的片段套 <mark>（关键字为首页过滤框内容）。 */
   function markName(name) { return markHtml(name, homeFilter); }
-  /** 是否为需要忽略的目录名（点开头，或常见构建/缓存目录）。 */
-  function isIgnoredDir(name) { return name.charAt(0) === '.' || !!IGNORE_DIRS[name]; }
   /** 取节点 id，没有就分配一个并登记进 homeNodes（幂等）。 */
   function ensureNodeId(node) {
     if (!node.id) { node.id = 'hn' + (++homeSeq); homeNodes[node.id] = node; }
@@ -90,7 +87,7 @@
     if (!isDocName(leaf)) return;
     var node = root;
     for (var i = 0; i < parts.length; i++) {
-      if (i >= MAX_DEPTH || isIgnoredDir(parts[i])) return;
+      if (i >= treeMaxDepth() || treeHideDir(parts[i])) return;
       var next = null;
       for (var j = 0; j < node.children.length; j++) {
         if (node.children[j].type === 'dir' && node.children[j].name === parts[i]) { next = node.children[j]; break; }
@@ -111,10 +108,55 @@
     });
     node.children.forEach(function (c) { if (c.type === 'dir') sortTree(c); });
   }
+  /** 记下子树里每个目录的展开状态（键是相对路径，值是 1/0）：刷新前后视图不跳。 */
+  function snapshotExpanded(node, prefix, acc) {
+    (node.children || []).forEach(function (c) {
+      if (c.type !== 'dir') return;
+      var rel = prefix + c.name;
+      acc[rel] = c.expanded ? 1 : 0;
+      snapshotExpanded(c, rel + '/', acc);
+    });
+    return acc;
+  }
+  /** 刷新后按快照还原展开状态：新节点自身的 expanded 由各自创建处定，这里只覆盖快照里有的那些。
+      路径没了的目录自然不还（新树里不存在），新出现的目录保持创建时的默认。 */
+  function restoreExpanded(node, prefix, acc) {
+    (node.children || []).forEach(function (c) {
+      if (c.type !== 'dir') return;
+      var rel = prefix + c.name;
+      if (acc[rel] !== undefined) c.expanded = !!acc[rel];
+      restoreExpanded(c, rel + '/', acc);
+    });
+  }
+
+  /* ---- 刷新时的展开状态快照 ----
+     为什么不是一个局部变量：刷新服务器目录会**级联**（父目录重建后，剪枝探测会再逐个重取子目录，
+     那些子节点是新建的、只认各自创建时的默认值），所以快照必须对整次刷新期间的所有重取都可见；
+     又因为它只该管"这一次刷新"，任何用户展开/折叠动作都立刻作废它，免得反过来覆盖用户随后的选择。 */
+  var refreshCard = null;        // 本次刷新针对的卡片根
+  var refreshSnapshot = null;    // 它刷新前的展开状态（相对路径 → 1/0）
+
+  /** 刷新一张卡之前调用：记下它当前的展开状态。 */
+  function beginRefreshSnapshot(card) {
+    refreshCard = card;
+    refreshSnapshot = snapshotExpanded(card, '', {});
+  }
+  /** 用户自己动过展开状态（或刷新结束）时调用：快照作废，不再参与后续加载。 */
+  function clearRefreshSnapshot() {
+    refreshCard = null;
+    refreshSnapshot = null;
+  }
+  /** 刚重建完某一层就调用：若这一层属于本次刷新的卡片，按快照还回展开状态。 */
+  function restoreRefreshSnapshot(node) {
+    if (!refreshSnapshot || rootOf(node) !== refreshCard) return;
+    restoreExpanded(node, node === refreshCard ? '' : relOf(node) + '/', refreshSnapshot);
+  }
+
   /** 把一批本地文件按顶层目录名加进首页（同名本地目录会替换旧的）。
-      entries 形如 { rel, file } 或 { rel, handle }：句柄来源的项每次打开都现读。 */
-  function addLocalDir(name, entries) {
-    var dir = { name: name, source: 'local', children: [], expanded: true };
+      entries 形如 { rel, file } 或 { rel, handle }：句柄来源的项每次打开都现读。
+      handle 是源目录句柄（有它才谈得上"刷新目录列表"，见 refreshLocalDir）。 */
+  function addLocalDir(name, entries, handle) {
+    var dir = { name: name, source: 'local', children: [], expanded: true, handle: handle || null };
     entries.forEach(function (e) { insertFile(dir, e.rel, e.file, e.handle); });
     sortTree(dir);
     if (!dir.children.length) {
@@ -138,7 +180,7 @@
   /** 遍历目录句柄：entries() 是异步迭代器，逐个读。
       容错与 entry 路线一致：单个条目读不动就跳过它，不让整次扫描失败。 */
   function collectDirHandle(dirHandle, prefix, acc, depth) {
-    if (depth > MAX_DEPTH) return Promise.resolve();
+    if (depth > treeMaxDepth()) return Promise.resolve();
     var it = dirHandle.entries();
     var step = function () {
       return it.next().then(function (r) {
@@ -155,7 +197,7 @@
       if (isDocName(name)) acc.push({ rel: prefix + name, handle: h });
       return Promise.resolve();
     }
-    if (isIgnoredDir(name)) return Promise.resolve();     // 跳过构建 / 缓存目录
+    if (treeHideDir(name)) return Promise.resolve();      // 忽略名单 / 点号规则（白名单可放行）
     return collectDirHandle(h, prefix + name + '/', acc, depth);
   }
 
@@ -165,11 +207,37 @@
     var walk = src.handle
       ? collectDirHandle(src.handle, src.name + '/', acc, 0)
       : collectEntries(src.entry, src.name + '/', acc, 0);
-    return walk.then(function () { addLocalDir(src.name, acc); })
+    return walk.then(function () { addLocalDir(src.name, acc, src.handle || null); })
       .catch(function () {
         homeNotice = '读取「' + esc(src.name) + '」失败：目录被移动或被拒绝访问。';
         refreshHomeNow();
       });
+  }
+
+  /** 原地重读一个本地目录的列表：文件内容本来每次打开都现读，这里刷的是"这个目录里有哪些文件"。
+      只有拿到目录句柄的来源能刷新 —— File 快照（webkitdirectory / 无句柄的拖入）没有可再读的入口，
+      首页因此不给那种卡片显示按钮（见 07-home.js）。节点原地更新，id 与已打开的标签页都不受影响，
+      展开状态由调用方先 beginRefreshSnapshot 记下、这里还原（与服务器目录刷新同一套）。 */
+  function refreshLocalDir(node) {
+    if (!node || !node.handle || node.loading) return;
+    node.loading = true;
+    refreshHomeNow();                                       // 先让卡片显示"读取中…"
+    var acc = [];
+    collectDirHandle(node.handle, node.name + '/', acc, 0).then(function () {
+      node.loading = false;
+      node.children = [];
+      acc.forEach(function (e) { insertFile(node, e.rel, e.file, e.handle); });
+      sortTree(node);
+      restoreRefreshSnapshot(node);
+      clearRefreshSnapshot();
+      homeNotice = node.children.length ? ''
+        : '「' + esc(node.name) + '」里没有找到 markdown 文件（也可能都在被忽略的目录里）。';
+      refreshHomeNow();
+    }, function () {
+      node.loading = false;
+      homeNotice = '读取「' + esc(node.name) + '」失败：目录被移动或被拒绝访问。';
+      refreshHomeNow();
+    });
   }
 
   /** 「添加目录」：优先用目录选择器取句柄（本地文件因此也可刷新），
@@ -210,10 +278,12 @@
   /** 条目是否收进树：忽略目录名与 . / .. 之类，文件只留 markdown，同名去重。 */
   function acceptEntry(name, isDir, seen) {
     if (!name || name === '.' || name === '..' || seen[name]) return false;
-    return isDir ? !isIgnoredDir(name) : isDocName(name);
+    return isDir ? !treeHideDir(name) : isDocName(name);
   }
-  /** 解析 HTTP 目录索引 HTML，只取当前目录同层的子目录与 markdown 条目。 */
-  function parseListing(html, baseUrl) {
+  /** 解析 HTTP 目录索引 HTML，只取当前目录同层的子目录与 markdown 条目。
+      includeHidden=true 时不过滤忽略名单（设置面板要把"藏起来的那几个"也列出来给用户看），
+      文件一侧仍只认文档 —— 非文档文件在任何调用点都没用。 */
+  function parseListing(html, baseUrl, includeHidden) {
     var out = [], seen = Object.create(null);
     var basePath = new URL(baseUrl).pathname;                               // 形如 /dir/
     var re = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/gi, m;
@@ -232,7 +302,10 @@
       if (!raw || raw.indexOf('/') >= 0) continue;                            // 只看同层
       var name;
       try { name = decodeURIComponent(raw); } catch (e) { continue; }
-      if (!acceptEntry(name, isDir, seen)) continue;
+      if (includeHidden) {
+        if (!name || name === '.' || name === '..' || seen[name]) continue;
+        if (!isDir && !isDocName(name)) continue;
+      } else if (!acceptEntry(name, isDir, seen)) continue;
       seen[name] = 1;
       out.push({ name: name, type: isDir ? 'dir' : 'file', href: href });
     }
@@ -260,8 +333,8 @@
      要再请求一次才知道，所以加载完一层就顺手探测它的子目录：每目录一次请求并写回节点（之后展开
      是瞬时的），深度与请求数有上限，超限或读取失败一律保留。本地目录不需要：insertFile() 只沿
      markdown 路径建节点。 */
-  var PRUNE_LEVELS = 3;                                   // 最多往下探 3 层
-  var PRUNE_BUDGET = 40;                                  // 单次加载最多额外请求 40 次
+  var PRUNE_LEVELS = 3;                                   // 最多往下探 3 层（内部常量：只有"是否剪枝"是配置项）
+  var PRUNE_BUDGET = 40;                                  // 单次加载最多额外请求 40 次（同上，不对外开放）
   var pruneLeft = PRUNE_BUDGET;
 
   /** 节点距根卡片的层数。 */
@@ -274,12 +347,22 @@
   function hasVisible(node) {
     return (node.children || []).some(function (c) { return c.type === 'file' || c.keep === true; });
   }
+  /** 关掉空目录剪枝时用：整棵子树一次性标成保留，不发任何探测请求。 */
+  function markKeepAll(node) {
+    node.scanned = true;
+    node.keep = true;
+    (node.children || []).forEach(function (c) { if (c.type === 'dir') markKeepAll(c); });
+  }
   /** 需要渲染的子节点：判定为空目录（递归不含 markdown）的不返回。 */
   function visibleChildren(node) {
     return (node.children || []).filter(function (c) { return !(c.type === 'dir' && c.keep === false); });
   }
   /** 判定 node 子树里有没有 markdown，据此给它的子目录打 keep 标记（无内容则 keep=false）。 */
   function markKeepState(node, level) {
+    if (!treePruneEmpty()) {                               // 配置里关掉剪枝：整棵子树直接保留
+      markKeepAll(node);
+      return Promise.resolve(true);
+    }
     var kids = (node.children || []).filter(function (c) { return c.type === 'dir' && !c.scanned; });
     if (!kids.length) {
       node.scanned = true;
@@ -295,6 +378,7 @@
       pruneLeft--;
       return loadServerDir(c).then(function () {
         if (c.error === 'fail' || c.error === 'shadow') return true;   // 读不出来 → 保留
+        if (treeIsAllowed(c.name)) return true;                        // 白名单目录：显示且不参与剪枝
         return markKeepState(c, level + 1);
       }).then(function (keep) {
         c.scanned = true;
@@ -311,13 +395,10 @@
       return node.keep;
     });
   }
-  /** 取一个服务器目录的列表并写入节点，随后异步识别其中的空目录。
-      返回 Promise（展开全部会串联它）：内容就位后即可渲染，剪枝结果稍后补上。 */
-  function loadServerDir(node) {
-    node.loading = true;
-    node.error = '';
-    if (!node.parent) pruneLeft = PRUNE_BUDGET;                // 根卡片的这次加载：重置探测预算
-    return fetch(node.url, { headers: { Accept: 'text/html,application/xhtml+xml,text/plain' } })
+  /** 读一个服务器目录的列表（唯一的读取口：带 ok 校验与"服务器给了页面而不是列表"的识别）。
+      includeHidden=true 时不过滤忽略名单。失败时抛错，'shadow' 是其中一个约定的错误。 */
+  function readListing(url, includeHidden) {
+    return fetch(url, { headers: { Accept: 'text/html,application/xhtml+xml,text/plain' } })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.text();
@@ -325,27 +406,43 @@
       .then(function (text) {
         // 服务器优先返回同目录的 index.html（入口若叫 index.html 就是本应用自己）而不是目录列表，
         // 客户端无法绕过：单独报 'shadow'，由首页给出解释与可行做法（见 07-home.js）
-        if (text.indexOf('id="tabbar"') >= 0 || text.indexOf('js/08-boot.js') >= 0) {
-          node.loaded = true;
-          node.children = [];
-          node.error = 'shadow';
-          return;
-        }
-        var items = parseListing(text, node.url);
-        if (!items.length) items = parsePlainListing(text);                 // 再试纯文本列表
+        if (text.indexOf('id="tabbar"') >= 0 || text.indexOf('js/08-boot.js') >= 0) throw new Error('shadow');
+        var items = parseListing(text, url, includeHidden);
+        if (!items.length) items = parsePlainListing(text);   // 再试纯文本列表
+        return items;
+      });
+  }
 
+  /** 取一个服务器目录的列表并写入节点，随后异步识别其中的空目录。
+      返回 Promise（展开全部会串联它）：内容就位后即可渲染，剪枝结果稍后补上。 */
+  function loadServerDir(node) {
+    node.loading = true;
+    node.error = '';
+    if (!node.parent) pruneLeft = PRUNE_BUDGET;                // 根卡片的这次加载：重置探测预算
+    return readListing(node.url, false)
+      .then(function (items) {
         node.loaded = true;
+        // 目录再往下的这一层若已到深度上限就不再建节点：与本地来源（insertFile）同一口径，
+        // 否则配置里的 maxDepth 只对本地文件夹生效，服务器来源看着像"没生效"
+        var nextDepth = dirDepth(node) + 1;
         node.children = items.map(function (it) {
           if (it.type === 'file') {
             return { name: it.name, type: 'file', url: new URL(it.href, node.url).href, parent: node };
           }
+          if (nextDepth > treeMaxDepth()) return null;
           return { name: it.name, type: 'dir', url: new URL(it.href, node.url).href,
                    children: [], expanded: false, parent: node };
-        });
+        }).filter(Boolean);                                  // 深度超限的位置是 null（见上），这里丢掉
         sortTree(node);
+        restoreRefreshSnapshot(node);                        // 正在刷新的那张卡：还回它刷新前的展开状态
         if (!items.length) node.error = 'empty';
       })
-      .catch(function () { node.error = 'fail'; node.loaded = false; })
+      .catch(function (e) {
+        var shadow = (e && e.message) === 'shadow';           // 只有这两个状态：读不出来 / 服务器给了页面
+        node.error = shadow ? 'shadow' : 'fail';
+        node.loaded = shadow;
+        if (shadow) node.children = [];
+      })
       .then(function () {
         node.loading = false;
         refreshHomeNow();
@@ -354,6 +451,60 @@
         }
       });
   }
+
+  /** 重载所有「服务器来源」的根卡片：配置改动保存后用，让隐藏 / 放行的目录按新规则重排。
+      本地来源（添加目录 / 拖入）不动 —— 那些树是加进来时一次走完的，要用户重新选一次目录。 */
+  function reloadAutoDirs() {
+    homeDirs.forEach(function (d) {
+      if (d.source !== 'server') return;
+      d.children = [];
+      d.loaded = false;
+      d.expanded = true;
+      loadServerDir(d);
+    });
+  }
+
+  /* ---- 一次性扫描（给设置面板的「当前目录可见性」）----
+     与懒加载那棵树不同：这里不建节点、不留缓存、不改任何状态，扫完即弃。
+     两个上限都是内部常量：面板只是"解释一下为什么这个目录不见了"，不值得为它再开放配置项。 */
+  var SCAN_DEPTH = 3;      // 判断"里面有没有文档"最多往下探几层
+  var SCAN_BUDGET = 30;    // 一次扫描最多发多少次额外请求
+
+  /** 扫一层：某个服务器目录下有哪些子目录，各自子树里有没有文档。
+     不过滤忽略名单（隐藏的那几个正是要给用户看的），所以走 includeHidden。 */
+  function scanServerRoot(url) {
+    var left = SCAN_BUDGET;
+    /** 有界探测：到底 / 超预算 / 读不出来一律按"有文档"算 —— 与剪枝时读失败保守保留同一口径，
+        免得面板说"剪掉"、树上却还在（那才是真的说不清）。 */
+    function hasDoc(u, depth) {
+      if (depth > SCAN_DEPTH || left <= 0) return Promise.resolve(true);
+      left--;
+      return readListing(u, true).then(function (items) {
+        if (items.some(function (it) { return it.type === 'file'; })) return true;
+        var subs = items.filter(function (it) { return it.type === 'dir'; });
+        return subs.reduce(function (p, it) {
+          return p.then(function (hit) {
+            return hit ? true : hasDoc(new URL(it.href, u).href, depth + 1);
+          });
+        }, Promise.resolve(false));
+      }, function () { return true; });
+    }
+    return readListing(url, true).then(function (items) {
+      var dirs = items.filter(function (it) { return it.type === 'dir'; });
+      return Promise.all(dirs.map(function (it) {
+        return hasDoc(new URL(it.href, url).href, 1).then(function (has) {
+          return { name: it.name, hasDoc: has };
+        });
+      }));
+    }).then(function (list) {
+      return { dirs: list, error: '' };
+    }, function (e) {
+      return { dirs: [], error: (e && e.message) === 'shadow'
+        ? '服务器返回的是同目录的 index.html、不是目录列表，扫不出这一层有什么。'
+        : '扫描失败：' + ((e && e.message) || e) };
+    });
+  }
+
   /** 由页面地址推断服务器目录的展示名（末段是文件名时用上一级，都没有则「当前目录」）。 */
   function autoDirName() {
     var parts = location.pathname.split('/').filter(Boolean);
@@ -388,8 +539,8 @@
                    function () { resolve(); });
         return;
       }
-      if (!entry.isDirectory || depth > MAX_DEPTH) { resolve(); return; }
-      if (depth > 0 && isIgnoredDir(entry.name)) { resolve(); return; }
+      if (!entry.isDirectory || depth > treeMaxDepth()) { resolve(); return; }
+      if (depth > 0 && treeHideDir(entry.name)) { resolve(); return; }
       var reader = entry.createReader(), batch = [];
       (function read() {
         reader.readEntries(function (list) {

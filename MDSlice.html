@@ -7,12 +7,13 @@
 <!-- 代码高亮主题：两套按 prefers-color-scheme 互斥，手动切换主题时会改写 media（见 js/05-shell.js） -->
 <link rel="stylesheet" id="hljs-theme-light" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" id="hljs-theme-dark" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-<!-- 样式按职责拆分，顺序即优先级：令牌 → 骨架 → 文档内容 → 首页 → 悬浮预览 -->
+<!-- 样式按职责拆分，顺序即优先级：令牌 → 骨架 → 文档内容 → 首页 → 悬浮预览 → 设置面板 -->
 <link rel="stylesheet" href="css/01-tokens.css">
 <link rel="stylesheet" href="css/02-layout.css">
 <link rel="stylesheet" href="css/03-markdown.css">
 <link rel="stylesheet" href="css/04-home.css">
 <link rel="stylesheet" href="css/05-preview.css">
+<link rel="stylesheet" href="css/06-settings.css">
 </head>
 <body>
 
@@ -40,6 +41,7 @@
   <span class="brand">MDSlice</span>
   <div class="tabbar" id="tabbar"></div>
   <span class="spacer"></span>
+  <button class="tbtn" id="rulesBtn" title="忽略与显示规则（哪些目录显示 / 被忽略）">⚙ 规则</button>
   <button class="tbtn" id="fileBtn">打开 MD</button>
   <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
   <input type="file" id="dirInput" webkitdirectory hidden>
@@ -79,7 +81,9 @@ window.MathJax = {
 };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
-<!-- 逻辑按职责拆分：共享全局作用域（不用 ES module，否则 file:// 直开会因 CORS 被拦），顺序即依赖 -->
+<!-- 逻辑按职责拆分：共享全局作用域（不用 ES module，否则 file:// 直开会因 CORS 被拦），顺序即依赖。
+     00-config 必须最先：忽略 / 白名单 / 深度 / 剪枝的判定都由它给出，06-dirs.js 与 08-boot.js 都要问它 -->
+<script src="js/00-config.js"></script>
 <script src="js/01-core.js"></script>
 <script src="js/02-markdown.js"></script>
 <script src="js/03-render.js"></script>
@@ -89,6 +93,7 @@ window.MathJax = {
 <script src="js/07-home.js"></script>
 <script src="js/08-boot.js"></script>
 <script src="js/09-preview.js"></script>
+<script src="js/10-settings.js"></script>
 
 </body>
 </html>

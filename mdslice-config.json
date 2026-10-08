@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "default": {
+    "ignoreDirs": [
+      "node_modules",
+      "bower_components",
+      "vendor",
+      "dist",
+      "build",
+      "out",
+      "target",
+      "coverage",
+      "__pycache__"
+    ],
+    "ignoreDotDirs": true,
+    "allowDirs": [],
+    "maxDepth": 8,
+    "pruneEmpty": true
+  },
+  "projects": {}
+}

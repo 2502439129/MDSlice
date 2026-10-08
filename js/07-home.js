@@ -91,7 +91,7 @@
         '<span class="home__dirname">' + esc(d.name) + '/</span>' +
         '<span class="home__path">' + (d.source === 'server' ? '静态服务器 · 自动列出同目录'
           : (d.source === 'dropped' ? '拖入的文件夹' : '选择的文件夹')) + '</span>' +
-        (d.source === 'server'
+        (d.source === 'server' || d.handle                        // 本地目录只在自己拿着句柄时才刷得了（见 refreshLocalDir）
           ? '<button class="tbtn home__btn" data-act="reload" data-id="' + ensureNodeId(d) + '">刷新</button>' : '') +
         '<button class="tbtn home__btn" data-act="rmdir" data-id="' + ensureNodeId(d) + '">移除</button>' +
         '</div>';
@@ -143,6 +143,7 @@
         else if (c.error === 'fail') inner = '<div class="ftree__empty">无法读取（服务器未开启目录索引）</div>';
         else if (c.error === 'shadow') inner = '<div class="ftree__empty">这里也有 index.html，服务器返回的是页面而不是目录列表</div>';
         else if (vkids.length) inner = treeHtml(c);
+        else if (!c.loaded) inner = '';                      // 列表还没读过（关掉剪枝后不再预探测）：先什么都不说，展开时才去读
         else inner = '<div class="ftree__empty">(空目录)</div>';
         h += '<div class="ftree__children"' + (c.expanded ? '' : ' hidden') + '>' + inner + '</div>';
       }
@@ -172,7 +173,13 @@
         if (act === 'folder') toggleFolder(id); else openHomeFile(id);
         return;
       }
-      if (act === 'reload') { var d = homeNodes[id]; if (d) loadServerDir(d); return; }
+      if (act === 'reload') {
+        var d = homeNodes[id];
+        if (!d) return;
+        beginRefreshSnapshot(d);                                                // 刷新前记下展开状态，刷完还回去
+        if (d.source === 'server') loadServerDir(d); else refreshLocalDir(d);   // 服务器重取列表，本地重走目录句柄
+        return;
+      }
       if (act === 'rmdir') { removeDir(id); return; }
     });
     tab.dom.pane.addEventListener('input', function (e) {
@@ -207,6 +214,7 @@
       折叠是纯状态操作；展开会递归展开每个目录，遇到未加载的服务器子目录先按需加载再展开。
       homeDirs 里的根节点没有 type 字段，所以只能用 children 判断是不是目录。 */
   function setAllExpanded(open) {
+    clearRefreshSnapshot();                     // 用户明确要求全展/全折：刷新快照作废，别反过来压住这次操作
     if (!open) {
       homeDirs.forEach(function collapse(d) {
         if (!d.children) return;
@@ -229,6 +237,7 @@
   function toggleFolder(id) {
     var n = homeNodes[id];
     if (!n || n.type !== 'dir') return;
+    clearRefreshSnapshot();                     // 用户自己折叠/展开了：刷新快照作废
     if (n.expanded) { n.expanded = false; refreshHomeNow(); return; }
     n.expanded = true;
     if (n.url && !n.loaded && !n.loading) { refreshHomeNow(); loadServerDir(n); return; }

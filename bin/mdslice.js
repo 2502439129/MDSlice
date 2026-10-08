@@ -10,9 +10,10 @@
  *   mdslice -h / -v            帮助 / 版本
  *
  * 路由：
- *   /__mdslice/          阅读器页面（MDSlice.html 与 css/、js/ 直接从包目录取，引用不用改写）
- *   /                    被浏览目录的内容：目录一律返回索引页，文件按静态服务返回（支持 Range）
- *   其他                 404
+ *   /__mdslice/              阅读器页面（MDSlice.html 与 css/、js/ 直接从包目录取，引用不用改写）
+ *   /__mdslice/api/config    写回 mdslice-config.json（POST，只给设置面板用）
+ *   /                        被浏览目录的内容：目录一律返回索引页，文件按静态服务返回（支持 Range）
+ *   其他                     404
  *
  * 三个刻意的设计：
  *   1. 阅读器页面与「被浏览的目录」分居两个地址：首页既要显示目录、又要按目录读列表
@@ -20,6 +21,8 @@
  *      页面地址一旦就是内容根，这两件事会抢同一个 URL。分开放，各自都直白。
  *   2. 目录名与内容根地址由服务注入 window.MDSLICE（见 serveEntry），boot 有配置就用配置、
  *      没有就退回按页面地址推断 —— 所以普通静态服务器与 file:// 直开的用法一字未改。
+ *      同一份注入里还带着可见性配置（mdslice-config.json）的原文与项目绝对路径：
+ *      页面按路径挑出本项目那一段再决定树里显示什么，服务端不参与配置语义。
  *   3. 目录一律给索引页，即使里面有 index.html：静态服务器用 index.html 顶掉目录列表，
  *      正是「同目录有 index.html 就列不出文件」的老问题（js/07-home.js 的 shadow 分支）。
  *      索引页只放 <a href>，正好是 js/06-dirs.js 的 parseListing 认得的最小形式。
@@ -34,6 +37,7 @@ const { spawn } = require('node:child_process');
 
 const APP_HOME = path.resolve(__dirname, '..');       // 包根：MDSlice.html 与 css/、js/ 在这一级
 const ENTRY = 'MDSlice.html';
+const CONFIG_FILE = 'mdslice-config.json';            // 可见性配置：服务端只负责把原文交给页面
 const ASSET_DIRS = ['css', 'js'];
 const ASSET_PREFIX = '/__mdslice';
 const DEFAULT_PORT = 8787;
@@ -142,17 +146,26 @@ async function serveFile(res, abs, range) {
 }
 
 /* ---- 路由 1：阅读器页面与自身资源 ---- */
-/** 入口页注入来源信息：目录名照原样显示，内容根是 '/'。
+/** 入口页注入来源信息：目录名照原样显示，内容根是 '/'，外加可见性配置的原文。
     地址必须是完整的绝对 URL —— 前端拿它当 new URL() 的基地址解析子目录（js/06-dirs.js），
-    而端口可能因占用递增过，所以只能取启动时定下来的那个（state.port）。 */
+    而端口可能因占用递增过，所以只能取启动时定下来的那个（state.port）。
+
+    配置只把「文件原文 + 这是哪个项目」交给页面，由页面自己解析合并（js/00-config.js）：
+    服务端因此不需要认识配置语义，也就不会出现两份合并逻辑。每次请求都读一次文件，
+    改完配置刷新页面即生效（入口页与配置都不缓存）。 */
 async function serveEntry(res, state) {
   let html;
   try { html = await fsp.readFile(path.join(APP_HOME, ENTRY), 'utf8'); }
   catch (e) { return send(res, 500, '缺少阅读器入口 ' + ENTRY + '（在 ' + APP_HOME + ' 下没找到）'); }
   const root = 'http://127.0.0.1:' + state.port + '/';
+  let configText = '';
+  try { configText = await fsp.readFile(path.join(APP_HOME, CONFIG_FILE), 'utf8'); }
+  catch (e) { /* 没有配置文件：注入空串，页面按内置默认跑 */ }
   // < 转义掉：目录名里出现 </script 时不会把这段脚本截断（名字来自本地目录，防的是手滑不是攻击）
-  const cfg = '<script>window.MDSLICE=' +
-    JSON.stringify({ name: state.name, url: root }).replace(/</g, '\\u003c') + ';</script>';
+  const cfg = '<script>window.MDSLICE=' + JSON.stringify({
+    name: state.name, url: root,
+    configFile: path.join(APP_HOME, CONFIG_FILE), configPath: state.root, configText: configText,
+  }).replace(/</g, '\\u003c') + ';</script>';
   if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, cfg + '</head>');
   else if (/<html[^>]*>/i.test(html)) html = html.replace(/<html[^>]*>/i, (m) => m + cfg);
   else html = cfg + html;
@@ -200,6 +213,80 @@ async function serveListing(res, abs, dirPath) {
     rows.join('\n') + '\n</ul>\n</body></html>\n', { 'Content-Type': MIME['.html'] });
 }
 
+/* ---- 路由 3：写回配置（设置面板的「保存」） ----
+   只做「把这一段写进那个键」，不认识配置语义（有哪些字段、该是什么类型，判断都在页面侧，
+   见 js/00-config.js 的 CONFIG_FIELDS）—— 语义只留一处，才不会两边漂移。
+   两条防呆：请求头必须带 application/json（非简单请求，别的站点发不出这一手，因此不必再加 CORS 头）；
+   文件本身解析不了就直接拒绝 —— 绝不覆盖一份自己没读懂的文件（那多半是手写改到一半）。 */
+const sendJson = (res, code, obj) =>
+  send(res, code, JSON.stringify(obj), { 'Content-Type': MIME['.json'] });
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** 项目路径归一化成 projects 段的键：与 js/00-config.js 的 configKey 同一口径（只此一处需要它）。 */
+const configKeyOf = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
+
+/** 读请求体（带上限，别让一个坏请求把内存撑住）。 */
+async function readBody(req, limit) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error('请求体过大');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function saveConfig(req, res) {
+  if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) {
+    return sendJson(res, 415, { ok: false, error: '需要 Content-Type: application/json' });
+  }
+  let data;
+  try { data = JSON.parse(await readBody(req, 64 * 1024)); }
+  catch (e) { return sendJson(res, 400, { ok: false, error: '请求体不是合法 JSON：' + e.message }); }
+
+  const section = isPlainObject(data) ? data.cfg : null;
+  const scope = isPlainObject(data) ? data.scope : '';
+  if (!isPlainObject(section)) return sendJson(res, 400, { ok: false, error: '缺少 cfg（应当是一个配置对象）' });
+  if (scope !== 'default' && scope !== 'project') {
+    return sendJson(res, 400, { ok: false, error: 'scope 只能是 default 或 project' });
+  }
+
+  const file = path.join(APP_HOME, CONFIG_FILE);
+  let doc = null;
+  try {
+    const text = await fsp.readFile(file, 'utf8');
+    if (text.trim() !== '') {
+      try { doc = JSON.parse(text); }
+      catch (e) {
+        return sendJson(res, 409, { ok: false, error:
+          '配置文件现在解析不了，已拒绝写入（先把它修好或删掉）：' + e.message });
+      }
+    }
+  } catch (e) { /* 文件还不存在：下面新建 */ }
+  if (!isPlainObject(doc)) doc = {};        // 内容不是对象（或被删空）：当新文件重建，但只动这两个键
+
+  if (scope === 'default') {
+    doc.default = Object.assign(isPlainObject(doc.default) ? doc.default : {}, section);
+  } else {
+    const key = configKeyOf(data.projectPath);
+    if (!key) return sendJson(res, 400, { ok: false, error: '写本项目段需要 projectPath（命令行启动时带着的那个目录）' });
+    if (!isPlainObject(doc.projects)) doc.projects = {};
+    // 已经存在的键可能写作别的形式（大小写、反斜杠）：按归一化找到它，免得同一个项目出现两条
+    let hit = null;
+    Object.keys(doc.projects).forEach((k) => { if (configKeyOf(k) === key) hit = k; });
+    const useKey = hit || key;
+    doc.projects[useKey] = Object.assign(isPlainObject(doc.projects[useKey]) ? doc.projects[useKey] : {}, section);
+  }
+  // 同名字段覆盖、其余字段保留：schema 与注释性的额外字段都不动（schema 缺失时也不补，
+  // 页面侧对"没有 schema"是宽容的，服务端不必替它记一个版本号）
+
+  const out = JSON.stringify(doc, null, 2) + '\n';
+  try { await fsp.writeFile(file, out, 'utf8'); }
+  catch (e) { return sendJson(res, 500, { ok: false, error: '写入失败：' + e.message }); }
+  sendJson(res, 200, { ok: true, file: file, scope: scope, text: out });   // 交回新原文：页面立刻按它跑
+}
+
 /* ---- 主处理 ---- */
 function makeHandler(ROOT, state) {
   return async function handle(req, res) {
@@ -209,6 +296,10 @@ function makeHandler(ROOT, state) {
     const decoded = safeDecode(rawPath);
     if (decoded === null) return send(res, 400, '路径编码有误');
 
+    if (decoded === ASSET_PREFIX + '/api/config') {
+      if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: '只接受 POST' });
+      return saveConfig(req, res);
+    }
     if (decoded === ASSET_PREFIX) return redirect(res, 301, ASSET_PREFIX + '/');
     if (decoded.indexOf(ASSET_PREFIX + '/') === 0) {
       const rel = decoded.slice(ASSET_PREFIX.length + 1);
@@ -291,6 +382,6 @@ if (args.help) {
     process.exit(1);
   }
   const name = path.basename(root) || 'root';       // 盘符根目录（basename 为空）也得有个名字
-  const state = { name: name, port: port };         // port 会在真正监听成功后回填
+  const state = { name: name, port: port, root: root };   // port 会在真正监听成功后回填
   listen(makeHandler(root, state), port, root, state, 0);
 }

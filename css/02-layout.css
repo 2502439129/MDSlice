@@ -7,6 +7,12 @@
 .tbtn{appearance:none;border:1px solid var(--border);background:var(--bg-subtle);color:var(--text-muted);
   border-radius:6px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
 .tbtn:hover{color:var(--text);border-color:var(--border-strong)}
+/* 主操作（如设置面板的「保存」/「复制 JSON」）：实心强调色；禁用时退回普通态的观感。
+   白字是刻意的固定值（不跟主题走）：它压在主题色上，两种主题下都是"实体按钮"，
+   与 .sw__knob 的固定白同一个理由（深浅两套的对比度都够）。 */
+.tbtn--primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tbtn--primary:hover{background:var(--accent);border-color:var(--accent);color:#fff;filter:brightness(1.08)}
+.tbtn--primary:disabled{background:var(--bg-inset);border-color:var(--border);color:var(--text-faint);cursor:default;filter:none}
 .menu-btn{display:none}
 /* 品牌标题：常驻顶栏左侧，位于首页标签之前 */
 .brand{flex:none;font-size:13.5px;font-weight:650;color:var(--text-muted);white-space:nowrap}

@@ -1,0 +1,117 @@
+/* settings.css —— 「忽略与显示规则」抽屉浮层（逻辑见 js/10-settings.js）。
+   挂在 body 下（与预览浮层同属页面级浮层），因此自带一层紧凑排版；
+   配色一律用 01-tokens.css 的令牌（深浅两套都已覆盖），不新增令牌。
+   z 序按现有层级排：顶栏 60 → 本层遮罩 65 / 抽屉 75 → 轻提示 80（提示要能盖在面板上）。
+   四处列表（默认排除目录 / 白名单 / 黑名单 / 当前目录可见性）共用 .list + .row 一套行结构，
+   状态不用正文那套 .badge 胶囊，改用整行底色与行末普通文字（见 .row.is-hidden 与 .dot）。 */
+
+.settings-mask{position:fixed;inset:0;z-index:65;display:none;background:rgba(0,0,0,.32);animation:fade .12s ease}
+.settings-mask.is-on{display:block}
+
+/* 宽度用 100% 而不是 100vw：vw 含滚动条宽度，窄屏下会让抽屉往左溢出（实测视口 512 / 布局宽 497） */
+.settings{position:fixed;top:0;right:0;bottom:0;z-index:75;display:none;flex-direction:column;
+  width:min(432px,100%);box-sizing:border-box;
+  border-left:1px solid var(--border-strong);background:var(--bg);color:var(--text);
+  font-size:13.5px;line-height:1.6;box-shadow:-18px 0 48px rgba(0,0,0,.2)}
+.settings.is-on{display:flex;animation:settings-in .16s ease}
+@keyframes settings-in{from{transform:translateX(14px);opacity:0}to{transform:none;opacity:1}}
+
+.settings__head{display:flex;align-items:center;gap:8px;flex:none;padding:12px 14px;
+  border-bottom:1px solid var(--border);background:var(--bg-subtle)}
+.settings__title{font-weight:650}
+.settings__spacer{flex:1}
+.settings__close{appearance:none;border:0;background:none;color:var(--text-muted);font:inherit;
+  font-size:15px;line-height:1;cursor:pointer;padding:4px 6px;border-radius:6px}
+.settings__close:hover{color:var(--text);background:var(--bg-inset)}
+
+.settings__body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:12px 14px}
+.settings__sec{margin:18px 0 8px;font-size:12.5px;font-weight:650;color:var(--text-muted)}
+.settings__sec:first-child{margin-top:0}
+.settings__hint{margin:6px 0 0;font-size:12px;color:var(--text-muted)}
+.settings__hint code,.settings__label code,.settings__note code{font-family:var(--font-mono);font-size:11.5px;
+  background:var(--bg-inset);border-radius:4px;padding:0 4px}
+/* 写入域：一行里的那个"这次改动落到配置文件的哪一段"的小芯片 */
+.settings__to{flex:none;font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);
+  background:var(--bg-inset);border-radius:4px;padding:1px 6px}
+.settings__note{margin:0 0 10px;padding:8px 10px;border-radius:var(--radius);
+  color:var(--c-info);background:var(--c-info-bg);font-size:12.5px}
+.settings__row{display:flex;align-items:center;gap:10px;padding:7px 0}
+.settings__label{flex:1;min-width:0}
+
+/* 作用域分段控件 */
+.seg{flex:none;display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.seg__btn{appearance:none;border:0;background:var(--bg-subtle);color:var(--text-muted);
+  font:inherit;font-size:12.5px;padding:3px 10px;cursor:pointer}
+.seg__btn + .seg__btn{border-left:1px solid var(--border)}
+.seg__btn:hover{color:var(--text)}
+.seg__btn.is-on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+/* 「内置名单」这类标注：描边胶囊（面板里唯一还用胶囊的地方，与行末的普通文字区分开） */
+.tag{flex:none;font-size:11px;color:var(--text-muted);border:1px solid var(--border);border-radius:20px;padding:0 6px}
+
+/* 三处共用的列表（默认排除目录 / 白名单 / 当前目录可见性）：一行一个，行末放各自控件。
+   同一套样式，读起来才像"同一类东西的不同状态"，而不是三个各写一套的控件。 */
+.list{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--bg-inset);font-size:13px}
+.row:first-child{border-top:0}
+.row__name{flex:none;font-family:var(--font-mono);font-size:12.5px}
+/* 右侧说明：靠 auto 外边距贴到行末控件前面（开关 / 移除按钮），多行自然对齐成一列 */
+.row__why{flex:none;margin-left:auto;color:var(--text-faint);font-size:11.5px;white-space:nowrap}
+/* 可见性区：显示的目录整行正常、行末挂"绿点 + 显示"；不显示的整行压暗（底色 + 文字色），
+   原因写在行末，用普通文字而不是高亮胶囊 */
+.row.is-shown .row__why{color:var(--text-muted)}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--c-success);
+  margin-right:6px;vertical-align:1px}
+.row.is-hidden{background:var(--bg-inset)}
+.row.is-hidden .row__name{color:var(--text-faint)}
+.row.is-hidden .row__why{color:var(--text-muted)}
+/* 列表里的分隔（如"点号规则"与下面一串目录名之间） */
+.list__gap{height:1px;background:var(--border)}
+
+/* 白名单行末的移除按钮（同样贴右）；空态与新增行 */
+.row__del{flex:none;margin-left:auto;appearance:none;background:none;border:1px solid var(--border);color:var(--text-muted);
+  border-radius:5px;font:inherit;font-size:11.5px;padding:1px 7px;cursor:pointer}
+.row__del:hover{color:var(--c-danger);border-color:var(--c-danger)}
+.row--empty{color:var(--text-faint);font-size:12px}
+.row__plus{flex:none;color:var(--text-faint)}
+.row__input{flex:1;min-width:0;appearance:none;border:0;background:none;color:var(--text);
+  font:inherit;font-size:12.5px;padding:2px 0;outline:none}
+
+/* 开关：自绘（原生 checkbox 在深浅两套下观感不一致，正文里的任务框也是自绘的）。
+   滑块用固定白：它在两种主题下都是"实体控件"，不跟随文字色。 */
+.sw{flex:none;position:relative;width:38px;height:22px;border-radius:999px;cursor:pointer;
+  appearance:none;border:1px solid var(--border);background:var(--bg-inset);padding:0}
+.sw__knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .12s ease}
+.sw[aria-checked="true"]{background:var(--accent);border-color:var(--accent)}
+.sw[aria-checked="true"] .sw__knob{left:18px}
+
+/* 递归深度：滑块 + 等宽读数（与面板里的目录名同一字体） */
+.range{flex:1;min-width:0;accent-color:var(--accent);cursor:pointer}
+.range__val{flex:none;min-width:44px;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--text-muted)}
+
+/* 配置读不到的模式（file://）下控件一律禁用：别摆出"能改"的样子（禁用后点击事件也不会派发） */
+.settings .sw:disabled,.settings .range:disabled,
+.settings .row__del:disabled,.settings .row__input:disabled{opacity:.45;cursor:not-allowed}
+
+/* 底部：配置文件位置。标签不许压缩、路径自己吃剩余宽度并省略号截断（完整值放 title），
+   免得长路径把"配置文件"四个字挤成两行。 */
+.settings__path{display:flex;align-items:center;gap:6px;flex:none;padding:6px 14px;
+  border-top:1px solid var(--border);background:var(--bg-subtle);font-size:11.5px;color:var(--text-faint)}
+.settings__path-label{flex:none}
+.settings__path code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--font-mono);color:var(--text-muted)}
+
+.settings__foot{display:flex;align-items:center;gap:8px;flex:none;padding:10px 14px;
+  border-top:1px solid var(--border);background:var(--bg-subtle)}
+.settings__dirty{flex:1;font-size:12px;color:var(--text-faint)}
+.settings__dirty.is-on{color:var(--c-warn)}
+.settings__dirty.is-on::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--c-warn);margin-right:5px;vertical-align:1px}
+
+/* 窄屏：抽屉占满宽度，行内标签换行到控件上方 */
+@media (max-width:820px){
+  .settings{width:100%;border-left:0}
+  .settings__row{flex-wrap:wrap}
+  .settings__label{flex:1 0 100%}
+}
