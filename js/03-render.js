@@ -603,11 +603,14 @@
   /** 对作用域内的公式占位元素（[data-tex]）调用 MathJax 排版：
       先按 data-tex 生成公式节点，再跑一次 MathJax 的文档排版流程 —— 每个字形的 CSS 与样式表
       都由那一步按用到的字符注册进文档，少了它字形会没有内容（公式看着是空的）。
-      库尚未就绪时等它加载完再排；单个公式出错就保留 $…$ 原文。 */
+      MathJax 由 js/00-libs.js 竞速加载，就绪后同样走这里补排一次；库不可用时保留 $…$ 原文。 */
   function renderMath(scope) {
     var MJ = window.MathJax;                    // MDSlice.html 里的内联配置先建立该对象
-    if (!MJ || !MJ.startup || !MJ.startup.promise || !MJ.tex2chtml) return;
+    /* 判据只用 startup.promise：内联配置对象没有它（= 库未加载），库加载后由它标出排版器何时可用。
+       这里不检查 tex2chtml —— 库刚 onload 时它可能还没挂上，提前返回会让公式永远排不出来。 */
+    if (!MJ || !MJ.startup || !MJ.startup.promise) return;
     MJ.startup.promise.then(function () {
+      if (!MJ.tex2chtml) return;                // 理论上 promise 兑现后就有，留一道保险
       Array.prototype.forEach.call(scope.querySelectorAll('[data-tex]'), function (el) {
         var node;
         try {

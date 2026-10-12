@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MDSlice</title>
-<!-- 代码高亮主题：两套按 prefers-color-scheme 互斥，手动切换主题时会改写 media（见 js/05-shell.js） -->
-<link rel="stylesheet" id="hljs-theme-light" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" id="hljs-theme-dark" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<!-- 代码高亮主题：href 由 js/00-libs.js 用 fetch 竞速探出最快的源后填充（哪个源快用哪个），
+     这里先只占位 —— media="print" 表示首帧前不生效、也不阻塞渲染；05-shell.js 一执行就会把它
+     改成 all / not all 接管切换，之后再填 href 就会正常加载。
+     两个 id 不能改：手动切主题就是靠改写它们的 media 实现的 -->
+<link rel="stylesheet" id="hljs-theme-light" media="print">
+<link rel="stylesheet" id="hljs-theme-dark" media="print">
 <!-- 样式按职责拆分，顺序即优先级：令牌 → 骨架 → 文档内容 → 首页 → 悬浮预览 → 设置面板 -->
 <link rel="stylesheet" href="css/01-tokens.css">
 <link rel="stylesheet" href="css/02-layout.css">
@@ -69,8 +72,9 @@
   </aside>
 </div>
 
-<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-<!-- 数学公式：先建立配置对象（03-render.js 的 renderMath 依赖它），再加载库本体。
+<!-- 外部库（highlight.js / MathJax）不用阻塞式 <script>：改由 js/00-libs.js 多源竞速加载，
+     首屏因此完全不等网络；库到达后再对已渲染内容补一次高亮与排版。
+     这份配置必须先于库本体建立（renderMath 靠 MathJax.startup.promise 判断库是否就绪）。
      不用 MathJax 的定界符扫描：$$ 与 $ 的识别完全由 js/02-markdown.js 负责
      （行内要求 $ 前后是空白、行首行尾或强调标记），排版时按元素的 data-tex 调用 tex2chtml，
      所以这里关掉启动扫描与全部定界符。 -->
@@ -80,9 +84,10 @@ window.MathJax = {
   tex: { inlineMath: [], displayMath: [] }
 };
 </script>
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
 <!-- 逻辑按职责拆分：共享全局作用域（不用 ES module，否则 file:// 直开会因 CORS 被拦），顺序即依赖。
-     00-config 必须最先：忽略 / 白名单 / 深度 / 剪枝的判定都由它给出，06-dirs.js 与 08-boot.js 都要问它 -->
+     00-libs 最先：它不依赖别的模块，而 05-shell.js 要同步取两个高亮主题元素；
+     00-config 紧随其后：忽略 / 白名单 / 深度 / 剪枝的判定都由它给出，06-dirs.js 与 08-boot.js 都要问它 -->
+<script src="js/00-libs.js"></script>
 <script src="js/00-config.js"></script>
 <script src="js/01-core.js"></script>
 <script src="js/02-markdown.js"></script>
