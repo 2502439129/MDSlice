@@ -322,21 +322,28 @@
   }
 
   /* ---- 表格（└ 折叠树 / [[必填]] 徽章 / 逐列自动分类） ---- */
-  /** 列名 → 列语义：**逐列**命中，不牵连同一张表的其他列。
-      两类别名，触发条件不同：
-      - 结构类（必填 / 类型 / 示例值 / 默认值 / 字段 / 说明 / 参数 / 名称）叙述型表格易误伤，
-        因此只作用于「整格恰好是一个行内代码」的单元格；
-      - 取值类（状态 / 完成度 / 进度）单元格取值本身就是封闭枚举，纯文本与行内代码两种写法都认，
-        取值不在枚举内时落回普通行内解析。
-      未命中的列（如 `语法` / `备注`）一律走普通行内解析。 */
+  /** 列名 → 列语义：**逐列**命中，不牵连同一张表的其他列。别名按**触发条件**分三类：
+      - 取值类（必填 / 状态 / 完成度 / 进度）：取值本身就是封闭枚举，纯文本与行内代码两种写法都认；
+        取值不在枚举内时落回普通行内解析，只有 `必填` 列例外 —— 它改为标红示警，
+        因为「这里写错了」和「这里压根不是必填列」在正文里都该看得出来。
+      - 样式类（字段 / 参数 / 名称 / 标题）：**列名命中就整列换样式**，不挑单元格怎么写。
+        门槛对内容是自然语言的列是错配的（没人会给中文短语套反引号）。`字段` / `参数` 装的是
+        标识符，单元格里的行内代码会被剥掉，写成纯文本也是同样外观；`名称` / `标题` 是整列加粗，
+        内容照常按行内解析 —— 写了反引号仍是加粗 + 行内代码，样式叠加而不是剥夺写法。
+      - 反引号类（类型 / 示例值 / 默认值）：要求该格**整格恰好是一个行内代码**才生效 ——
+        `类型` 的取值（`string`）与普通词（`折叠块`）没法从内容上区分，`示例值` / `默认值`
+        要分「值 vs 说明」，两者都需要作者显式标记；`example` 再按像不像字面量分橙 / 加粗等宽。
+      未命中的列（`语法` / `备注` / `说明` …）一律走普通行内解析。 */
   var COLUMN_SEMANTIC = {
     '必填': 'required', '类型': 'type',
     '示例值': 'example', '默认值': 'example',
-    '字段': 'code', '说明': 'code', '参数': 'code', '名称': 'code',
+    '字段': 'code', '参数': 'code',
+    '名称': 'name', '标题': 'name',
     '状态': 'status', '完成度': 'progress', '进度': 'bar'
   };
 
-  /** `example` 语义下「像字面量」的取值：数组、引号串、布尔、null、数字。 */
+  /** `example` 语义下「像字面量」的取值：数组、引号串、布尔、null、数字。
+      判前先去掉首尾空白，与 `必填` 列一个口径（反引号里手滑多打个空格不算差异）。 */
   var LITERAL_VALUE = /^(\[.*\]|".*"|'.*'|true|false|null|-?\d+(\.\d+)?)$/;
 
   /** 按未转义的 | 拆一行表格，`\|` 还原成字面竖线。 */
@@ -396,40 +403,46 @@
   }
 
   /** 单元格的基础呈现：命中列语义时按语义变样式
-      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽 / 状态胶囊 / 完成度环 / 进度条），其余情况一律走普通行内解析。
-      结构类语义要求**整格恰好是一个行内代码**；取值类语义（状态 / 完成度 / 进度）纯文本也认，
-      且取值不落在枚举内时同样落回普通行内解析。 */
+      （徽章 / 灰等宽 / 橙色字面量 / 加粗等宽 / 整列加粗 / 状态胶囊 / 完成度环 / 进度条），
+      其余情况一律走普通行内解析。
+      取值类（必填 / 状态 / 完成度 / 进度）纯文本也认，取值不落在枚举内时落回普通行内解析
+      （`必填` 例外，见 requiredCell）；样式类（code / name）整列生效、不设门槛；
+      反引号类（type / example）要求整格是一个行内代码。 */
   function cellHtml(raw, semantic) {
     var txt = raw === undefined || raw === null ? '' : String(raw);
     var codeOnly = txt.match(/^`([^`]+)`$/);
     var value = codeOnly ? codeOnly[1] : txt;             // 纯文本：\| 已在 splitRow 还原
 
+    if (semantic === 'required') return requiredCell(value) || inline(txt);
     if (semantic === 'status') return statusCell(value.trim()) || inline(txt);
     if (semantic === 'progress') return progressCell(value.trim()) || inline(txt);
     if (semantic === 'bar') return barCell(value.trim()) || inline(txt);
 
-    if (!semantic || !codeOnly) return inline(txt);
+    // 样式类：整列照样式走，单元格包不包行内代码都一样（行内代码只是「这是标识符」的写法）
+    if (semantic === 'code') return '<span class="field">' + esc(value) + '</span>';
+    if (semantic === 'name') return '<span class="name">' + inline(txt) + '</span>';
 
-    var v = value;
-    if (semantic === 'required') return requiredCell(v);
-    if (semantic === 'type') return '<span class="type">' + esc(v) + '</span>';
+    // 反引号类（type / example）：整格是一个行内代码才生效
+    if (!codeOnly || (semantic !== 'type' && semantic !== 'example')) return inline(txt);
+    if (semantic === 'type') return '<span class="type">' + esc(value) + '</span>';
 
-    if (semantic === 'example') {
-      return LITERAL_VALUE.test(v)
-        ? '<span class="ex">' + esc(v) + '</span>'
-        : '<span class="field">' + esc(v) + '</span>';
-    }
-
-    return '<span class="field">' + esc(v) + '</span>';
+    return LITERAL_VALUE.test(value.trim())
+      ? '<span class="ex">' + esc(value) + '</span>'
+      : '<span class="field">' + esc(value) + '</span>';
   }
 
-  /** `必填` 列只接受两种取值（首尾空白不算差异）：各自给对应徽章；
-      其余取值不在允许范围内，标红并附提示，让写错的地方在正文里直接看得见。 */
+  /** `必填` 列只接受两种取值（首尾空白不算差异）：各自给对应徽章；其余取值不在允许范围内，
+      标红并附提示，让写错的地方在正文里直接看得见。
+      取值封闭，所以与 `状态` / `完成度` / `进度` 同类：纯文本与行内代码两种写法都认。
+      两种情况退回空串、交回普通行内解析：空格子没什么可标；整格的 `[[必填]]` 是行内徽章语法
+      自己的地盘（renderBadge 出徽章），不在这里再判一遍。 */
   function requiredCell(text) {
-    var v = text.trim();
+    var t = text === undefined || text === null ? '' : String(text);
+    var v = t.trim();
+    if (!v || /^\[\[[^\]]+\]\]$/.test(v)) return '';
     if (v === '必填') return '<span class="badge badge--required">必填</span>';
     if (v === '选填') return '<span class="badge badge--optional">选填</span>';
-    return '<span class="invalid" title="必填列只接受 必填 / 选填">' + esc(text) + '</span>';
+    return '<span class="invalid" title="必填列只接受 必填 / 选填">' + esc(t) + '</span>';
   }
 
   /** `状态` 列的取值枚举：三个取值各有配色与图标，其余取值不算命中，落回普通行内解析。

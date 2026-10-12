@@ -106,9 +106,13 @@ tbody td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:
 tbody tr:last-child td{border-bottom:0}
 tbody tr:nth-child(even){background:var(--bg-subtle)}
 tbody tr:hover{background:var(--accent-soft)}
+/* 列语义样式（对应 02-markdown.js 的 COLUMN_SEMANTIC）：
+   .field 标识符列（字段 / 参数）加粗等宽、.type 类型列灰等宽、.ex 示例值/默认值列的橙色字面量、
+   .name 名称列的整列加粗——走正文 sans、不加等宽，是低侵入的那一档 */
 td .field{font-family:var(--font-mono);font-size:13px;font-weight:600;white-space:nowrap}
 td .type{font-family:var(--font-mono);font-size:12.5px;color:var(--text-muted)}
 td .ex{font-family:var(--font-mono);font-size:12.5px;color:var(--c-warn);word-break:break-all}
+td .name{font-weight:650}
 /* 取值不在该列允许范围内的单元格（如 `必填` 列写成「否」）：标红示警，悬停给出正确取值 */
 td .invalid{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--c-danger);word-break:break-all}
 
