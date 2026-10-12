@@ -331,10 +331,11 @@
   /* ---- 空目录剪枝 ----
      服务器列表会列出所有子目录，不含 markdown 的（如只放 css/js 的）不该显示。子目录里有没有 md
      要再请求一次才知道，所以加载完一层就顺手探测它的子目录：每目录一次请求并写回节点（之后展开
-     是瞬时的），深度与请求数有上限，超限或读取失败一律保留。本地目录不需要：insertFile() 只沿
-     markdown 路径建节点。 */
+     是瞬时的），深度、请求数与并发都有上限，超限或读取失败一律保留。本地目录不需要：insertFile()
+     只沿 markdown 路径建节点。 */
   var PRUNE_LEVELS = 3;                                   // 最多往下探 3 层（内部常量：只有"是否剪枝"是配置项）
   var PRUNE_BUDGET = 40;                                  // 单次加载最多额外请求 40 次（同上，不对外开放）
+  var PRUNE_CONCURRENCY = 6;                              // 同一层最多同时探 6 个子目录，其余排队
   var pruneLeft = PRUNE_BUDGET;
 
   /** 节点距根卡片的层数。 */
@@ -357,6 +358,19 @@
   function visibleChildren(node) {
     return (node.children || []).filter(function (c) { return !(c.type === 'dir' && c.keep === false); });
   }
+  /** 限并发地跑一批任务（同时最多 limit 个，其余排队），返回按输入顺序排列的结果。
+      调用点的任务自己兜住了失败（见 markKeepState），所以这里不做错误处理。 */
+  function mapLimit(items, limit, fn) {
+    var out = new Array(items.length), next = 0;
+    function worker() {
+      var i = next++;
+      if (i >= items.length) return Promise.resolve();
+      return Promise.resolve(fn(items[i], i)).then(function (v) { out[i] = v; return worker(); });
+    }
+    var runners = [];
+    for (var k = 0; k < Math.min(limit, items.length); k++) runners.push(worker());
+    return Promise.all(runners).then(function () { return out; });
+  }
   /** 判定 node 子树里有没有 markdown，据此给它的子目录打 keep 标记（无内容则 keep=false）。 */
   function markKeepState(node, level) {
     if (!treePruneEmpty()) {                               // 配置里关掉剪枝：整棵子树直接保留
@@ -374,7 +388,8 @@
       node.keep = true;
       return Promise.resolve(true);
     }
-    return Promise.all(kids.map(function (c) {
+    return mapLimit(kids, PRUNE_CONCURRENCY, function (c) {
+      if (pruneLeft <= 0) return Promise.resolve(true);      // 预算用完：剩下的保守保留，不再发请求
       pruneLeft--;
       return loadServerDir(c).then(function () {
         if (c.error === 'fail' || c.error === 'shadow') return true;   // 读不出来 → 保留
@@ -389,16 +404,25 @@
         c.keep = true;
         return true;
       });
-    })).then(function () {
+    }).then(function () {
       node.scanned = true;
       node.keep = hasVisible(node);
       return node.keep;
     });
   }
+  var LIST_TIMEOUT = 6000;                                 // 单次目录列表请求的等待上限（见 readListing）
   /** 读一个服务器目录的列表（唯一的读取口：带 ok 校验与"服务器给了页面而不是列表"的识别）。
-      includeHidden=true 时不过滤忽略名单。失败时抛错，'shadow' 是其中一个约定的错误。 */
+      includeHidden=true 时不过滤忽略名单。失败时抛错，'shadow' 是其中一个约定的错误。
+      请求带超时：目录索引是个小请求，正常不到一秒；卡住不回来的不该让整层（展开或剪枝）一直等，
+      超时按读不出来处理 —— 调用方落进 fail，用户折叠再展开即可重试。 */
   function readListing(url, includeHidden) {
-    return fetch(url, { headers: { Accept: 'text/html,application/xhtml+xml,text/plain' } })
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, LIST_TIMEOUT) : 0;
+    var done = function () { if (timer) { clearTimeout(timer); timer = 0; } };
+    return fetch(url, {
+      headers: { Accept: 'text/html,application/xhtml+xml,text/plain' },
+      signal: ctl ? ctl.signal : undefined
+    })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.text();
@@ -410,7 +434,8 @@
         var items = parseListing(text, url, includeHidden);
         if (!items.length) items = parsePlainListing(text);   // 再试纯文本列表
         return items;
-      });
+      })
+      .then(function (items) { done(); return items; }, function (e) { done(); throw e; });
   }
 
   /** 取一个服务器目录的列表并写入节点，随后异步识别其中的空目录。
