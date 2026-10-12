@@ -1,6 +1,6 @@
 {
   "name": "mdslice",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "把 Markdown 按标题切成章节块、一次只读一章的本地阅读器；本包提供零依赖的本地服务入口，可在任意项目目录里浏览其 md 文档",
   "keywords": [
     "markdown",
