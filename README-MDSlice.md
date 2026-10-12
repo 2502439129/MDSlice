@@ -3,7 +3,7 @@
 ---
 title: MDSlice 使用说明
 version: V1.8.0
-updated: 2026-10-08
+updated: 2026-10-12
 scope: 单文件 Markdown 章节阅读器（零构建 / 零后端）
 ---
 
@@ -145,7 +145,7 @@ cd 别的项目 && mdslice   # 自动开浏览器；用完 npm unlink -g mdslice
 
 ---
 title: 本应用语法
-updated: 2026-10-06
+updated: 2026-10-12
 scope: 每种语法的写法，以及可直接看到效果的示例
 ---
 
@@ -241,26 +241,56 @@ scope: 每种语法的写法，以及可直接看到效果的示例
 
 #### 表格列语义
 
-写法：某一列的列名是 `字段` / `类型` / `必填` / `示例值` / `状态` / `完成度` / `进度` 等已知名字时，这一列按结构化列渲染，同一张表里其他列不受影响
+写法：某一列命中已知列名时，这一列按该列名的语义渲染，同一张表里其他列不受影响
 
-命中的列里，整格是行内代码的单元格才随列名变样式（`类型` 灰等宽、`示例值` 像字面量则橙色、`字段` 等列加粗等宽）。`必填` 列只接受 `必填` 与 `选填` 两种取值（首尾空白不算差异），分别渲染成红色、灰色徽章；写成别的取值会**标红示警**，鼠标悬停提示正确取值：
+| 列类别 | 列名 | 列值写法 |
+|---|---|---|
+| 取值类 | `必填` / `状态` / `完成度` / `进度` | 纯文本或 `行内代码` 都行，样式由取值决定 |
+| 样式类 | `字段` / `参数` / `名称` / `标题` | 任意内容，整列换样式 |
+| 反引号类 | `类型` / `示例值` / `默认值` | 必须整格是 `行内代码` 才生效 |
 
-| 字段 | 类型 | 必填 | 示例值 |
+:::tabs
+:::tab 取值类
+| 必填 | 状态 | 完成度 | 进度 |
 | --- | --- | --- | --- |
-| title | `string` | `必填` | `"示例"` |
-| pages | `number` | `选填` | `12` |
-| tags | `[string]` | `选填` | `[a, b]` |
-
-`状态`、`完成度` 与 `进度` 是**取值类**：单元格写纯文本即可（行内代码也行），取值本身决定样式 —— `已完成` / `进行中` / `待开始` 渲染成三色状态胶囊，`0%` ~ `100%` 渲染成进度环 + 百分比（100% 的环心带勾），`3/5` 渲染成分数 + 进度条（条宽 = 分子 / 分母）。取值不匹配时按普通文本显示，所以下面末行不会被误改：
-
-| 任务 | 状态 | 完成度 | 进度 |
+| 必填 | 已完成 | 100% | 1/1 |
+| 选填 | 进行中 | 60% | 3/5 |
+| 非法值 | 待开始 | 0% | 0/1 |
+| 非法值 | 非法值 | 80 | 6/5 |
+:::
+:::tab 样式类
+| 字段 | 参数 | 名称 | 标题 |
 | --- | --- | --- | --- |
-| 冻结 + 备份 | 已完成 | 100% | 1/1 |
-| 云环境重建 | 进行中 | 60% | 3/5 |
-| 灰度放量 | 待开始 | 0% | 0/1 |
-| 反例 | 做了一半 | 80 | 6/5 |
+| `title` | `--page` | 页面标题 | 文档标题 |
+| pages | --size | 页数 | 附录 |
+:::
+:::tab 反引号类
+| 类型 | 示例值 | 默认值 |
+| --- | --- | --- |
+| `string` | `"示例"` | `null` |
+| `number` | `12` | `0` |
+| 折叠块 | 见下方 | off |
+:::
+:::
 
-`进度` 只是把文档里写的分数画出来，不做汇总：父行写 `3/5` 就一直是 3/5，不会因子项而变。
+**取值类**：取值决定样式 —— 取值不匹配就按普通文本显示。
+  - `必填` / `选填` 出红、灰徽章，写成别的取值会**标红示警**（悬停提示正确取值）
+  - `已完成` / `进行中` / `待开始` 是三色状态胶囊
+  - `0%` ~ `100%` 是进度环 + 百分比（100% 的环心带勾）
+  - `3/5` 是分数 + 进度条（条宽 = 分子 / 分母）
+
+
+**样式类**：不挑写法 —— 对应列名直接渲染。
+- `字段` / `参数` 加粗等宽
+- `名称` / `标题` 整列加粗
+
+**反引号类**：必须整格是 `行内代码` 才生效 ——
+- `类型` 出灰等宽
+- `示例值` / `默认值` 橙色等宽
+
+不在上表里的列名不启用判定，整列按普通文本渲染。
+
+> [!info] `进度` 只是把文档里写的分数画出来，不做汇总：父行写 `3/5` 就一直是 3/5，不会因子项而变。
 
 #### 表格首列待办
 
@@ -323,7 +353,8 @@ MDSlice/
 │   ├── 05-preview.css  # 链接悬浮预览浮层
 │   └── 06-settings.css # 「忽略与显示规则」抽屉面板
 ├── js/                 # 逻辑按职责拆分（经典脚本，共享全局作用域，顺序即依赖）
-│   ├── 00-config.js    # 可见性配置：忽略 / 白名单 / 深度 / 剪枝（最先加载）
+│   ├── 00-libs.js      # 外部库加载：highlight.js / MathJax 多源竞速引入（最先加载）
+│   ├── 00-config.js    # 可见性配置：忽略 / 白名单 / 深度 / 剪枝
 │   ├── 01-core.js      # DOM 引用、全局状态、通用工具
 │   ├── 02-markdown.js  # Markdown 解析与渲染
 │   ├── 03-render.js    # 章节切分、目录树、左/右栏、章节切换
@@ -363,14 +394,20 @@ MDSlice/
 
 ## 六、替换 CDN 为纯本地
 
-整页对外的请求只有 4 个：CDN 取 4 个文件，把它们换成本地文件，就得到一个完全不依赖网络的阅读器。
+整页对外只有 **4 个文件**：highlight.js 本体、两套代码主题 CSS、MathJax。它们的来源写在 `js/00-libs.js` 顶部的候选表里：
 
-| `MDSlice.html` 里的位置 | 现在（CDN 路径） | 改成本地路径 |
+| 用途 | 变量 | 候选源（竞速） |
 |---|---|---|
-| `<head>` 的 `<link id="hljs-theme-light">` | `.../cdn-release@11.9.0/build/styles/github.min.css` | `lib/hljs/github.min.css` |
-| `<head>` 的 `<link id="hljs-theme-dark">` | `.../cdn-release@11.9.0/build/styles/github-dark.min.css` | `lib/hljs/github-dark.min.css` |
-| 页尾第一个 `<script>` | `.../cdn-release@11.9.0/build/highlight.min.js` | `lib/hljs/highlight.min.js` |
-| 页尾 MathJax 的 `<script>` | `.../mathjax@3.2.2/es5/tex-chtml.js` | `lib/mathjax/tex-chtml.js` |
+| 代码高亮本体 | `LIB_SOURCES.hljs` | staticfile → unpkg → jsdelivr |
+| 公式排版 | `LIB_SOURCES.mathjax` | elemecdn → unpkg → staticfile |
+| 两套高亮主题 CSS | `LIB_STYLES` | 同 highlight.js 的三家 |
+
+**这些请求都不挡首屏**：页面先渲染，库到了再对已渲染的代码块与公式补一次高亮 / 排版；候选同时发出、谁先回来用谁，其余当场取消 —— 所以每种网络各自选中最快的源，任一家挂掉也不影响（库全拿不到时保持降级：代码不着色、公式显示 `$$…$$` 原文）。
+
+要变成完全不依赖网络：
+
+1. 把 4 个文件放进 `lib/`（目录结构见下）；
+2. 把 `js/00-libs.js` 里对应的候选数组换成本地路径（各留一项即可）—— 例如 `hljs: ['lib/hljs/highlight.min.js']`、`mathjax: ['lib/mathjax/tex-chtml.js']`，`LIB_STYLES` 里两项分别指向 `lib/hljs/github.min.css` 与 `lib/hljs/github-dark.min.css`。
 
 **MathJax 的字体目录必须按原结构一起拷贝**：它按自己所在路径去找 `output/chtml/fonts/woff-v2/`，只放一个 `tex-chtml.js` 的话公式会没有字形（看着是空的）。
 
@@ -386,8 +423,8 @@ lib/
     └── output/chtml/fonts/woff-v2/*.woff    数学字体（整目录）
 ```
 
-下载地址就是上面那 4 个 CDN 链接（前缀 `https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/`、`https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/`），按上表另存即可；MathJax 也可以 `npm i mathjax@3.2.2` 后把 `node_modules/mathjax/es5/` 整个拷成 `lib/mathjax/`。
+下载：highlight.js 取 `https://unpkg.com/@highlightjs/cdn-assets@11.9.0/` 下的 `highlight.min.js` 与 `styles/github.min.css`（注意 npm 包里**没有** `build/` 那一层）；MathJax 取 `https://unpkg.com/mathjax@3.2.2/es5/` 整个目录，或 `npm i mathjax@3.2.2` 后把 `node_modules/mathjax/es5/` 拷成 `lib/mathjax/`。
 
 两个容易漏的点：
 - 两个 `<link>` 的 **id 别改**（`hljs-theme-light` / `hljs-theme-dark`）：手动切主题是靠改写它们的 `media` 实现的（见 `js/05-shell.js`），换了 id 深浅色代码主题就不会跟着切。
-- 换代码配色只需替换那两个 css 文件；js 本体与版本建议保持与原 CDN 一致（highlight.js 11.9.0、MathJax 3.2.2）。
+- 换代码配色只需替换那两个 css 文件；js 本体与版本建议与候选表里的一致（highlight.js 11.9.0、MathJax 3.2.2）。

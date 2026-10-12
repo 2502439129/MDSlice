@@ -144,7 +144,7 @@ cd 别的项目 && mdslice   # 自动开浏览器；用完 npm unlink -g mdslice
 | 徽章 | `[[必填]]`、`[[选填]]`，其他文字渲染成默认色徽章 |
 | 元数据卡 | 章节标题下方紧跟 `---` 包裹的 `key: value` 块（如 `title`、`version`、`scope`） |
 | 表格折叠树 | 表格首列行首写 `└`（`├` `│` `┌` `┬` `─` 亦可，每个计一层）表达层级，父行可折叠 |
-| 表格列语义 | 列名是 `字段` / `类型` / `必填` / `示例值` 等名字时，该列按结构化列渲染（逐列判定，规则见 `MD结构说明.md` §4.1） |
+| 表格列语义 | 列名命中已知名字时该列按语义渲染，逐列生效：取值类（`必填` / `状态` / `完成度` / `进度`）纯文本即可、样式由取值决定；样式类（`字段` / `参数` / `名称` / `标题`）整列换样式、不挑写法；反引号类（`类型` / `示例值` / `默认值`）要求整格是行内代码（规则见 `MD结构说明.md` §4.1） |
 | 表格首列待办 | 首列在树形前缀之后写 `[ ]` / `[x]`，渲染成复选框并跟随缩进（规则见 `MD结构说明.md` §4.3） |
 | 围栏代码标题 | 围栏信息串里追加 `title="…"`（三个反引号 + 语言 + 该参数）→ 代码块顶部显示标题栏 |
 | 文档内链接 | `[文字](#锚点)` 接管为章节内跳转（匹配顺序见 `MD结构说明.md` §3.2），不刷新页面 |
@@ -176,7 +176,8 @@ MDSlice/
 │   ├── 05-preview.css  # 链接悬浮预览浮层
 │   └── 06-settings.css # 「忽略与显示规则」抽屉面板
 ├── js/                 # 逻辑按职责拆分（经典脚本，共享全局作用域，顺序即依赖）
-│   ├── 00-config.js    # 可见性配置：忽略 / 白名单 / 深度 / 剪枝（最先加载）
+│   ├── 00-libs.js      # 外部库加载：highlight.js / MathJax 多源竞速引入（最先加载）
+│   ├── 00-config.js    # 可见性配置：忽略 / 白名单 / 深度 / 剪枝
 │   ├── 01-core.js      # DOM 引用、全局状态、通用工具
 │   ├── 02-markdown.js  # Markdown 解析与渲染
 │   ├── 03-render.js    # 章节切分、目录树、左/右栏、章节切换
@@ -215,14 +216,20 @@ MDSlice/
 
 ## 六、替换 CDN 为纯本地
 
-整页对外的请求只有 4 个：CDN 取 4 个文件，把它们换成本地文件，就得到一个完全不依赖网络的阅读器。
+整页对外只有 **4 个文件**：highlight.js 本体、两套代码主题 CSS、MathJax。它们的来源写在 `js/00-libs.js` 顶部的候选表里：
 
-| `MDSlice.html` 里的位置 | 现在（CDN 路径） | 改成本地路径 |
+| 用途 | 变量 | 候选源（竞速） |
 |---|---|---|
-| `<head>` 的 `<link id="hljs-theme-light">` | `.../cdn-release@11.9.0/build/styles/github.min.css` | `lib/hljs/github.min.css` |
-| `<head>` 的 `<link id="hljs-theme-dark">` | `.../cdn-release@11.9.0/build/styles/github-dark.min.css` | `lib/hljs/github-dark.min.css` |
-| 页尾第一个 `<script>` | `.../cdn-release@11.9.0/build/highlight.min.js` | `lib/hljs/highlight.min.js` |
-| 页尾 MathJax 的 `<script>` | `.../mathjax@3.2.2/es5/tex-chtml.js` | `lib/mathjax/tex-chtml.js` |
+| 代码高亮本体 | `LIB_SOURCES.hljs` | staticfile → unpkg → jsdelivr |
+| 公式排版 | `LIB_SOURCES.mathjax` | elemecdn → unpkg → staticfile |
+| 两套高亮主题 CSS | `LIB_STYLES` | 同 highlight.js 的三家 |
+
+**这些请求都不挡首屏**：页面先渲染，库到了再对已渲染的代码块与公式补一次高亮 / 排版；候选同时发出、谁先回来用谁，其余当场取消 —— 所以每种网络各自选中最快的源，任一家挂掉也不影响（库全拿不到时保持降级：代码不着色、公式显示 `$$…$$` 原文）。
+
+要变成完全不依赖网络：
+
+1. 把 4 个文件放进 `lib/`（目录结构见下）；
+2. 把 `js/00-libs.js` 里对应的候选数组换成本地路径（各留一项即可）—— 例如 `hljs: ['lib/hljs/highlight.min.js']`、`mathjax: ['lib/mathjax/tex-chtml.js']`，`LIB_STYLES` 里两项分别指向 `lib/hljs/github.min.css` 与 `lib/hljs/github-dark.min.css`。
 
 **MathJax 的字体目录必须按原结构一起拷贝**：它按自己所在路径去找 `output/chtml/fonts/woff-v2/`，只放一个 `tex-chtml.js` 的话公式会没有字形（看着是空的）。
 
@@ -238,8 +245,8 @@ lib/
     └── output/chtml/fonts/woff-v2/*.woff    数学字体（整目录）
 ```
 
-下载地址就是上面那 4 个 CDN 链接（前缀 `https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/`、`https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/`），按上表另存即可；MathJax 也可以 `npm i mathjax@3.2.2` 后把 `node_modules/mathjax/es5/` 整个拷成 `lib/mathjax/`。
+下载：highlight.js 取 `https://unpkg.com/@highlightjs/cdn-assets@11.9.0/` 下的 `highlight.min.js` 与 `styles/github.min.css`（注意 npm 包里**没有** `build/` 那一层）；MathJax 取 `https://unpkg.com/mathjax@3.2.2/es5/` 整个目录，或 `npm i mathjax@3.2.2` 后把 `node_modules/mathjax/es5/` 拷成 `lib/mathjax/`。
 
 两个容易漏的点：
 - 两个 `<link>` 的 **id 别改**（`hljs-theme-light` / `hljs-theme-dark`）：手动切主题是靠改写它们的 `media` 实现的（见 `js/05-shell.js`），换了 id 深浅色代码主题就不会跟着切。
-- 换代码配色只需替换那两个 css 文件；js 本体与版本建议保持与原 CDN 一致（highlight.js 11.9.0、MathJax 3.2.2）。
+- 换代码配色只需替换那两个 css 文件；js 本体与版本建议与候选表里的一致（highlight.js 11.9.0、MathJax 3.2.2）。
