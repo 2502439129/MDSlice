@@ -193,12 +193,14 @@ td .invalid{font-family:var(--font-mono);font-size:13px;font-weight:600;color:va
 /* 可折叠树形首列 */
 /* 缩进步长取「折叠槽」的宽度 22px（按钮 17px + 间距 5px），于是每层恰好缩进到上一层的
    文字左缘（14 + 22n），子级的折叠按钮正落在父级文字起点上。
-   此前步长 20px 与槽宽不等，每深一层就偏 2px（三层累计 6px），缩放关系对不上 */
+   此前步长 20px 与槽宽不等，每深一层就偏 2px（三层累计 6px），缩放关系对不上。
+   这里只记层数，内边距由两处各算一遍：桌面在本文件末尾的悬挂缩进规则（步长 22px），
+   窄屏在 02-layout.css 的卡片规则（步长 16px）—— 两处步长不同，所以不写死在这里 */
 td.tree{white-space:nowrap}
-td.tree[data-level="1"]{padding-left:36px}
-td.tree[data-level="2"]{padding-left:58px}
-td.tree[data-level="3"]{padding-left:80px}
-td.tree[data-level="4"]{padding-left:102px}
+td.tree[data-level="1"]{--lv:1}
+td.tree[data-level="2"]{--lv:2}
+td.tree[data-level="3"]{--lv:3}
+td.tree[data-level="4"]{--lv:4}
 /* 叶子行在「折叠按钮」位置上的占位：宽度与 .tree-toggle 完全一致（17px + 5px 间距），
    但不画任何符号——层级改由 td.tree 的 padding-left 体现 */
 .tree-pad{display:inline-block;width:17px;margin-right:5px}
@@ -256,12 +258,34 @@ td.tree[data-level="4"] > .task-cb{--ck:16px;--ck-r:4px;margin-right:6px}
 /* 首列待办前缀（`[ ]` / `[x]`）：图标排在树形缩进之后，因此层级越深越靠右。
    右间距 4px 与 18px 方框凑成 22px（一个缩进槽），文字因此落在缩进网格上 */
 td.tree > .task-cb{margin:0 4px 0 0}
-/* 首列是待办列时把首列收窄到内容宽度，并补一条右侧分隔线，
-   免得收窄后待办项与右侧列之间看不出分界。
+/* 首行前的占位宽度（--lead）：树槽（叶子占位 / 折叠按钮，同宽 22px）与待办复选框（18 + 4px）
+   都排在文字之前，折行时次行会退回单元格左缘，于是与首行文字差这么多像素——复选框本身的表现
+   是独立的，文字列应当固定、折行与首行左对齐（列表任务项就是这么处理的，见 .tasklist）。
+   做法：把占位宽记进变量，内边距加出 --lead（两种显示模式各算一遍缩进步长），
+   排在最前的那一个占位再用等量负外边距退回内边距里，于是首行（含树槽与复选框）原位不动、
+   文字列固定在内边距处，次行起与首行文字左缘对齐。没有占位的单元格 --lead 为 0，规则退化成原样 */
+td.tree:has(> .tree-pad), td.tree:has(> .tree-toggle){--slot:22px}
+td.tree:has(> .task-cb){--check:22px}
+td.tree{--lead:calc(var(--slot, 0px) + var(--check, 0px))}
+/* 退回内边距：只退排在最前面的那一个占位，后面的（复选框）跟着它自然顺移 */
+td.tree > .tree-pad:first-child,
+td.tree > .tree-toggle:first-child,
+td.tree > .task-cb:first-child{margin-left:calc(-1 * var(--lead, 0px))}
+/* 待办列的首列必须允许折行：上面 td.tree 的 nowrap 是给「树形列」用的（一行一条短标识符），
+   落到待办列上时，首列一旦写成叙述（长句任务），这一列会被撑到整段文字的宽度——此时
+   width:1% 收不住它（1% 只在 nowrap 的配合下才等于「贴合内容」），整表便横向溢出容器。
+   折行之后宽度交回自动列宽：浏览器按各列的内容宽度成比例分配，哪一列内容长哪一列就宽，
+   表高最省；overflow-wrap 兜住「单个比容器还宽的标识符」，免得又从格子里溢出去。
+   折行不改首行位置——次行起与首行文字左缘对齐，靠的是上面那条悬挂缩进规则。 */
+table.task-col > tbody > tr > td:first-child{white-space:normal;overflow-wrap:anywhere}
+/* 首列是待办列时补一条右侧分隔线，免得首列与右侧列之间看不出分界
+   （首列宽度由内容与自动列宽决定，不再有 width:1% 这条收窄）。
    只在桌面表格布局下生效——卡片模式（≤820px）里单元格已改为块级，宽度要铺满整行 */
 @media (min-width:821px){
+  /* 首列悬挂缩进：左内边距 = 基础缩进（14 + 22 层）+ 首行占位宽（占位本身由上面的负外边距退回） */
+  td.tree{padding-left:calc(14px + var(--lv, 0) * 22px + var(--lead, 0px))}
   table.task-col > thead > tr > th:first-child,
-  table.task-col > tbody > tr > td:first-child{width:1%;border-right:1px solid var(--border)}
+  table.task-col > tbody > tr > td:first-child{border-right:1px solid var(--border)}
 }
 tbody tr.is-hidden{display:none}
 @media print{ tbody tr.is-hidden{display:table-row !important} }
