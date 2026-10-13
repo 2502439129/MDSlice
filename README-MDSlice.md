@@ -2,8 +2,8 @@
 
 ---
 title: MDSlice 使用说明
-version: V1.9.0
-updated: 2026-10-12
+version: V1.9.1
+updated: 2026-10-13
 scope: 单文件 Markdown 章节阅读器（零构建 / 零后端）
 ---
 
